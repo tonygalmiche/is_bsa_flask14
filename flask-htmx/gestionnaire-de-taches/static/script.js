@@ -894,25 +894,27 @@ function getSlotInfo(slotIndex) {
 // === GESTION DU RECHARGEMENT DES AFFAIRES ===
 
 function setupAffairsReload() {
-    const reloadBtn = document.getElementById('reload-affairs-btn');
-    if (reloadBtn) {
-        reloadBtn.addEventListener('click', reloadAffairs);
+    const reloadDataBtn = document.getElementById('reload-data-btn');
+    
+    if (reloadDataBtn) {
+        reloadDataBtn.addEventListener('click', reloadAllData);
     }
 }
 
-async function reloadAffairs() {
-    const btn = document.getElementById('reload-affairs-btn');
-    const status = document.getElementById('affairs-status');
+async function reloadAllData() {
+    const btn = document.getElementById('reload-data-btn');
+    const status = document.getElementById('status-text');
     
     if (!btn || !status) return;
     
     // Désactiver le bouton et changer le texte
+    const originalText = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = '⏳ Rechargement...';
+    btn.innerHTML = '⏳ Rechargement des données...';
     btn.classList.add('loading');
     
     try {
-        const response = await fetch('/api/reload-affairs', {
+        const response = await fetch('/api/reload-data', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -938,7 +940,7 @@ async function reloadAffairs() {
         }
         
     } catch (error) {
-        console.error('Erreur lors du rechargement des affaires:', error);
+        console.error('Erreur lors du rechargement des données:', error);
         status.textContent = 'Erreur de connexion';
         status.className = 'status-text status-error';
     }
@@ -946,7 +948,72 @@ async function reloadAffairs() {
     // Réactiver le bouton
     setTimeout(() => {
         btn.disabled = false;
-        btn.innerHTML = '🔄 Recharger les affaires';
+        btn.innerHTML = originalText;
+        btn.classList.remove('loading');
+        
+        // Remettre le statut normal après 3 secondes si pas d'erreur
+        if (!status.classList.contains('status-error')) {
+            status.className = 'status-text';
+        }
+    }, 2000);
+}
+
+async function reloadAffairs() {
+    await reloadData('/api/reload-affairs', 'reload-affairs-btn', 'affaires');
+}
+
+async function reloadOperators() {
+    await reloadData('/api/reload-operators', 'reload-operators-btn', 'opérateurs');
+}
+
+async function reloadData(endpoint, btnId, dataType) {
+    const btn = document.getElementById(btnId);
+    const status = document.getElementById('status-text');
+    
+    if (!btn || !status) return;
+    
+    // Désactiver le bouton et changer le texte
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `⏳ Rechargement des ${dataType}...`;
+    btn.classList.add('loading');
+    
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Succès
+            status.textContent = result.message;
+            status.className = 'status-text status-success';
+            
+            // Réactualiser la page après un court délai pour voir les changements
+            setTimeout(() => {
+                location.reload();
+            }, 1000);
+            
+        } else {
+            // Erreur
+            status.textContent = result.message;
+            status.className = 'status-text status-error';
+        }
+        
+    } catch (error) {
+        console.error(`Erreur lors du rechargement des ${dataType}:`, error);
+        status.textContent = 'Erreur de connexion';
+        status.className = 'status-text status-error';
+    }
+    
+    // Réactiver le bouton
+    setTimeout(() => {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
         btn.classList.remove('loading');
         
         // Remettre le statut normal après 3 secondes si pas d'erreur

@@ -102,6 +102,76 @@ def get_default_affaires():
         {"id": 8, "name": "Projet Theta", "color": "#98D8C8"}
     ]
 
+def load_operators_from_db():
+    """Charge les opérateurs depuis la base PostgreSQL"""
+    print("👥 Tentative de chargement des opérateurs depuis la base de données...")
+    try:
+        conn = get_db_connection()
+        if not conn:
+            print("❌ Impossible de se connecter à la base de données, utilisation des données par défaut")
+            return get_default_operators()
+        
+        print("✅ Connexion à la base de données établie pour les opérateurs")
+        
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            print("📊 Exécution de la requête SQL pour les opérateurs...")
+            cursor.execute("""
+                SELECT id, name 
+                FROM hr_employee 
+                ORDER BY name
+            """)
+            
+            rows = cursor.fetchall()
+            print(f"📋 {len(rows)} opérateurs récupérés de la base")
+            
+            operators = []
+            
+            for i, row in enumerate(rows):
+                print(f"  Opérateur {i+1}: ID={row['id']}, Name='{row['name']}'")
+                operators.append({
+                    "id": row['id'],
+                    "name": row['name'],
+                    "absences": []  # Pas d'absences dans un premier temps
+                })
+            
+            conn.close()
+            print(f"✅ {len(operators)} opérateurs chargés depuis la base de données")
+            print(f"📦 Données opérateurs finales: {operators}")
+            return operators
+            
+    except Exception as e:
+        print(f"❌ Erreur lors du chargement des opérateurs: {e}")
+        print("🔄 Utilisation des données par défaut pour les opérateurs")
+        return get_default_operators()
+
+def get_default_operators():
+    """Retourne les opérateurs par défaut en cas de problème de base de données"""
+    return [
+        {
+            "id": 1, 
+            "name": "Jean Dupont",
+            "absences": [
+                datetime(2025, 8, 12, 8, 0),   # 12 août AM
+                datetime(2025, 8, 20, 15, 0),  # 20 août PM
+            ]
+        },
+        {
+            "id": 2, 
+            "name": "Marie Martin",
+            "absences": [
+                datetime(2025, 8, 18, 8, 0),   # 18 août AM
+            ]
+        },
+        {"id": 3, "name": "Pierre Durand", "absences": []},
+        {"id": 4, "name": "Sophie Lambert", "absences": []},
+        {"id": 5, "name": "Antoine Moreau", "absences": []},
+        {"id": 6, "name": "Claire Rousseau", "absences": []},
+        {"id": 7, "name": "Lucas Bernard", "absences": []},
+        {"id": 8, "name": "Emma Lefevre", "absences": []},
+        {"id": 9, "name": "Thomas Dubois", "absences": []},
+        {"id": 10, "name": "Julie Garnier", "absences": []}
+    ]
+
 # Dates de congés (orange clair) - format datetime
 VACATION_DATES = [
     datetime(2025, 8, 15, 8, 0),   # 15 août AM
@@ -110,32 +180,10 @@ VACATION_DATES = [
     datetime(2025, 8, 25, 15, 0),  # 25 août PM
 ]
 
-# Données initiales
-OPERATORS = [
-    {
-        "id": 1, 
-        "name": "Jean Dupont",
-        "absences": [
-            datetime(2025, 8, 12, 8, 0),   # 12 août AM
-            datetime(2025, 8, 20, 15, 0),  # 20 août PM
-        ]
-    },
-    {
-        "id": 2, 
-        "name": "Marie Martin",
-        "absences": [
-            datetime(2025, 8, 18, 8, 0),   # 18 août AM
-        ]
-    },
-    {"id": 3, "name": "Pierre Durand", "absences": []},
-    {"id": 4, "name": "Sophie Lambert", "absences": []},
-    {"id": 5, "name": "Antoine Moreau", "absences": []},
-    {"id": 6, "name": "Claire Rousseau", "absences": []},
-    {"id": 7, "name": "Lucas Bernard", "absences": []},
-    {"id": 8, "name": "Emma Lefevre", "absences": []},
-    {"id": 9, "name": "Thomas Dubois", "absences": []},
-    {"id": 10, "name": "Julie Garnier", "absences": []}
-]
+# Chargement dynamique des opérateurs depuis la base de données
+print("👥 Initialisation: Chargement des opérateurs...")
+OPERATORS = load_operators_from_db()
+print(f"🎯 Variable OPERATORS initialisée avec {len(OPERATORS)} éléments: {OPERATORS}")
 
 # Chargement dynamique des affaires depuis la base de données
 print("🚀 Initialisation: Chargement des affaires...")
@@ -1053,6 +1101,41 @@ def debug_html():
     
     return jsonify(display_tasks)
 
+@app.route('/api/reload-data', methods=['POST'])
+def reload_data():
+    """Recharge à la fois les opérateurs et les affaires depuis la base de données"""
+    global OPERATORS, AFFAIRES
+    try:
+        print("🔄 Rechargement complet des données...")
+        
+        # Recharger les opérateurs
+        new_operators = load_operators_from_db()
+        operators_count = len(new_operators)
+        
+        # Recharger les affaires
+        new_affaires = load_affaires_from_db()
+        affaires_count = len(new_affaires)
+        
+        # Mettre à jour les variables globales seulement si tout s'est bien passé
+        OPERATORS = new_operators
+        AFFAIRES = new_affaires
+        
+        message = f"{operators_count} opérateurs et {affaires_count} affaires rechargés"
+        print(f"✅ {message}")
+        
+        return jsonify({
+            "success": True, 
+            "message": message,
+            "operators": OPERATORS,
+            "affairs": AFFAIRES
+        })
+    except Exception as e:
+        print(f"❌ Erreur lors du rechargement complet: {e}")
+        return jsonify({
+            "success": False, 
+            "message": f"Erreur lors du rechargement: {str(e)}"
+        }), 500
+
 @app.route('/api/reload-affairs', methods=['POST'])
 def reload_affairs():
     """Recharge les affaires depuis la base de données"""
@@ -1070,10 +1153,32 @@ def reload_affairs():
             "message": f"Erreur lors du rechargement: {str(e)}"
         }), 500
 
+@app.route('/api/reload-operators', methods=['POST'])
+def reload_operators():
+    """Recharge les opérateurs depuis la base de données"""
+    global OPERATORS
+    try:
+        OPERATORS = load_operators_from_db()
+        return jsonify({
+            "success": True, 
+            "message": f"{len(OPERATORS)} opérateurs rechargés",
+            "operators": OPERATORS
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False, 
+            "message": f"Erreur lors du rechargement: {str(e)}"
+        }), 500
+
 @app.route('/api/affairs')
 def get_affairs():
     """Retourne la liste des affaires"""
     return jsonify({"affairs": AFFAIRES})
+
+@app.route('/api/operators')
+def get_operators():
+    """Retourne la liste des opérateurs"""
+    return jsonify({"operators": OPERATORS})
 
 if __name__ == '__main__':
     #app.run(debug=True)

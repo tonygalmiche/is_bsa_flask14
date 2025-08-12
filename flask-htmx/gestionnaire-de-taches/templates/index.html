@@ -1,5 +1,12 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html             <div class="action-buttons">
+                <button id="reload-data-btn" class="btn btn-secondary">
+                    🔄 Recharger les données
+                </button>
+                <span id="status-text" class="status-text">
+                    {{ operators|length }} opérateurs - {{ affairs|length }} affaires
+                </span>
+            </div>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -21,10 +28,12 @@
         <div class="header-actions">
             <h1>Planning des Opérateurs</h1>
             <div class="action-buttons">
-                <button id="reload-affairs-btn" class="btn btn-secondary">
-                    🔄 Recharger les affaires
+                <button id="reload-data-btn" class="btn btn-secondary">
+                    � Recharger les données
                 </button>
-                <span id="affairs-status" class="status-text">{{ affairs|length }} affaires chargées</span>
+                <span id="status-text" class="status-text">
+                    {{ operators|length }} opérateurs - {{ affairs|length }} affaires
+                </span>
             </div>
         </div>
         
