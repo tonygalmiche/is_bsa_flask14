@@ -831,6 +831,8 @@ def keyboard_move_task():
                 return jsonify({"success": False, "error": "Tâche non trouvée"})
             
             current_operator_id = task["operator_id"]
+            print(f"🔄 DÉPLACEMENT VERTICAL - Tâche {task_id}, Direction: {direction}")
+            print(f"   Opérateur actuel: {current_operator_id}")
             
             # Filtrer les opérateurs qui ont au moins une tâche (même logique que dans index())
             operators_with_tasks = set()
@@ -839,32 +841,53 @@ def keyboard_move_task():
             
             # Obtenir la liste triée des IDs d'opérateurs qui ont des tâches
             visible_operator_ids = sorted([op['id'] for op in OPERATORS if op['id'] in operators_with_tasks])
+            print(f"   Opérateurs visibles: {visible_operator_ids}")
             
             # Trouver la position actuelle dans la liste filtrée
             try:
                 current_index = visible_operator_ids.index(current_operator_id)
+                print(f"   Index actuel: {current_index}")
             except ValueError:
+                print(f"   ❌ Opérateur {current_operator_id} introuvable dans la liste visible")
                 return jsonify({"success": False, "error": "Opérateur actuel introuvable"})
             
             new_operator_id = current_operator_id
             if direction == 'up' and current_index > 0:
                 new_operator_id = visible_operator_ids[current_index - 1]
+                print(f"   ⬆️ Déplacement vers l'opérateur {new_operator_id}")
             elif direction == 'down' and current_index < len(visible_operator_ids) - 1:
                 new_operator_id = visible_operator_ids[current_index + 1]
+                print(f"   ⬇️ Déplacement vers l'opérateur {new_operator_id}")
+            else:
+                print(f"   🚫 Déplacement impossible (déjà au bord)")
             
             if new_operator_id != current_operator_id:
-                task["operator_id"] = new_operator_id
-                
-                # Résoudre toutes les collisions sur le nouvel opérateur seulement si nécessaire
+                # Sauvegarder l'ancienne position au cas où le déplacement échoue
+                old_operator_id = task["operator_id"]
                 start_slot = get_task_start_slot(task)
                 duration_slots = get_task_duration_slots(task)
-                collision = check_collision(new_operator_id, start_slot, duration_slots, task_id)
-                if collision:
-                    resolve_all_collisions_on_operator(new_operator_id)
                 
-                # TODO: Mise à jour PostgreSQL
-                # update_task_in_database(task_id, new_operator_id, task["start_date"], task["duration_hours"])
+                print(f"   📍 Position: slot {start_slot}, durée {duration_slots}")
+                
+                # Vérifier d'abord si le déplacement est possible en utilisant la même logique robuste que pour les autres déplacements
+                push_success = push_all_colliding_tasks_right(new_operator_id, start_slot, duration_slots, task_id)
+                print(f"   💪 Push réussi: {push_success}")
+                
+                if push_success:
+                    # Le déplacement est possible, effectuer le changement d'opérateur
+                    task["operator_id"] = new_operator_id
+                    print(f"   ✅ Déplacement réussi vers l'opérateur {new_operator_id}")
+                    
+                    # TODO: Mise à jour PostgreSQL
+                    # update_task_in_database(task_id, new_operator_id, task["start_date"], task["duration_hours"])
+                else:
+                    # Le déplacement n'est pas possible, garder l'opérateur actuel
+                    print(f"   ❌ Déplacement refusé (pas assez d'espace)")
+                    return jsonify({"success": False, "error": "Impossible de déplacer la tâche vers cet opérateur : pas assez d'espace"})
+            else:
+                print(f"   ↔️ Pas de changement d'opérateur nécessaire")
             
+            print(f"   🎯 Opérateur final: {task['operator_id']}")
             return jsonify({"success": True, "new_operator_id": task["operator_id"]})
         
         return jsonify({"success": False, "error": "Direction invalide"})

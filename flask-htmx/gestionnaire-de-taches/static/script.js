@@ -361,17 +361,26 @@ function keyboardMoveTask(taskId, direction) {
             direction: direction
         })
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Erreur HTTP: ${response.status}`);
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
-            // Utiliser refreshPlanning AVEC scroll automatique seulement pour les changements d'opérateur (vertical)
-            const autoScroll = (direction === 'up' || direction === 'down');
-            refreshPlanning(taskId, autoScroll);
+            // Utiliser refreshPlanning AVEC scroll automatique pour tous les déplacements clavier
+            // Le scroll suit la tâche pour qu'elle reste toujours visible
+            refreshPlanning(taskId, true);
         } else {
-            showNotification('Erreur lors du déplacement de la tâche', 'error');
+            // Afficher le message d'erreur spécifique du serveur
+            const errorMessage = data.error || 'Erreur lors du déplacement de la tâche';
+            showNotification(errorMessage, 'error');
+            console.log('Erreur serveur:', data);
         }
     })
     .catch(error => {
+        console.error('Erreur complète:', error);
         showNotification('Erreur de communication avec le serveur', 'error');
     });
 }
