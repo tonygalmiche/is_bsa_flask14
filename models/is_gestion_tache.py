@@ -19,7 +19,7 @@ class is_gestion_tache(models.Model):
 
 #   "id": str(uuid.uuid4()),
 #         "operator_id": 9,
-#         "affair_id": 1,
+#         "affaire_id": 1,
 #         "start_date": datetime.combine(START_DATE + timedelta(days=18), datetime.min.time().replace(hour=8)),  # Slot 36 (Jour 19 AM)
 #         "duration_hours": 14,  # 4 slots
 #         "name": "Review Alpha"

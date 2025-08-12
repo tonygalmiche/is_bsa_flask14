@@ -75,7 +75,7 @@ TASKS = [
     {
         "id": str(uuid.uuid4()),
         "operator_id": 1,
-        "affair_id": 1,
+        "affaire_id": 1,
         "start_date": datetime.combine(START_DATE, datetime.min.time().replace(hour=8)),  # Slot 0 (Jour 1 AM)
         "duration_hours": 21,  # 6 slots (3.5h * 6 = 21h)
         "name": "Analyse Alpha"
@@ -83,7 +83,7 @@ TASKS = [
     {
         "id": str(uuid.uuid4()),
         "operator_id": 1,
-        "affair_id": 2,
+        "affaire_id": 2,
         "start_date": datetime.combine(START_DATE + timedelta(days=4), datetime.min.time().replace(hour=8)),  # Slot 8 (Jour 5 AM)
         "duration_hours": 14,  # 4 slots (3.5h * 4 = 14h)
         "name": "Dev Beta"
@@ -91,7 +91,7 @@ TASKS = [
     {
         "id": str(uuid.uuid4()),
         "operator_id": 2,
-        "affair_id": 3,
+        "affaire_id": 3,
         "start_date": datetime.combine(START_DATE + timedelta(days=1), datetime.min.time().replace(hour=8)),  # Slot 2 (Jour 2 AM)
         "duration_hours": 17.5,  # 5 slots (3.5h * 5 = 17.5h)
         "name": "Tests Gamma"
@@ -99,7 +99,7 @@ TASKS = [
     {
         "id": str(uuid.uuid4()),
         "operator_id": 2,
-        "affair_id": 4,
+        "affaire_id": 4,
         "start_date": datetime.combine(START_DATE + timedelta(days=5), datetime.min.time().replace(hour=8)),  # Slot 10 (Jour 6 AM)
         "duration_hours": 21,  # 6 slots (3.5h * 6 = 21h)
         "name": "Review Delta"
@@ -107,7 +107,7 @@ TASKS = [
     {
         "id": str(uuid.uuid4()),
         "operator_id": 3,
-        "affair_id": 5,
+        "affaire_id": 5,
         "start_date": datetime.combine(START_DATE + timedelta(days=2), datetime.min.time().replace(hour=8)),  # Slot 4 (Jour 3 AM)
         "duration_hours": 10.5,  # 3 slots (3.5h * 3 = 10.5h)
         "name": "Config Epsilon"
@@ -115,7 +115,7 @@ TASKS = [
     {
         "id": str(uuid.uuid4()),
         "operator_id": 3,
-        "affair_id": 1,
+        "affaire_id": 1,
         "start_date": datetime.combine(START_DATE + timedelta(days=4), datetime.min.time().replace(hour=15)),  # Slot 9 (Jour 5 PM)
         "duration_hours": 14,  # 4 slots (3.5h * 4 = 14h)
         "name": "Impl Alpha"
@@ -123,7 +123,7 @@ TASKS = [
     {
         "id": str(uuid.uuid4()),
         "operator_id": 4,
-        "affair_id": 6,
+        "affaire_id": 6,
         "start_date": datetime.combine(START_DATE + timedelta(days=6), datetime.min.time().replace(hour=8)),  # Slot 12 (Jour 7 AM)
         "duration_hours": 17.5,  # 5 slots
         "name": "Design Zeta"
@@ -131,7 +131,7 @@ TASKS = [
     {
         "id": str(uuid.uuid4()),
         "operator_id": 5,
-        "affair_id": 7,
+        "affaire_id": 7,
         "start_date": datetime.combine(START_DATE + timedelta(days=7), datetime.min.time().replace(hour=8)),  # Slot 14 (Jour 8 AM)
         "duration_hours": 14,  # 4 slots
         "name": "Debug Eta"
@@ -139,7 +139,7 @@ TASKS = [
     {
         "id": str(uuid.uuid4()),
         "operator_id": 5,
-        "affair_id": 8,
+        "affaire_id": 8,
         "start_date": datetime.combine(START_DATE + timedelta(days=9), datetime.min.time().replace(hour=8)),  # Slot 18 (Jour 10 AM)
         "duration_hours": 10.5,  # 3 slots
         "name": "Deploy Theta"
@@ -147,7 +147,7 @@ TASKS = [
     {
         "id": str(uuid.uuid4()),
         "operator_id": 6,
-        "affair_id": 2,
+        "affaire_id": 2,
         "start_date": datetime.combine(START_DATE + timedelta(days=10), datetime.min.time().replace(hour=8)),  # Slot 20 (Jour 11 AM)
         "duration_hours": 14,  # 4 slots
         "name": "Setup Beta"
@@ -155,7 +155,7 @@ TASKS = [
     {
         "id": str(uuid.uuid4()),
         "operator_id": 6,
-        "affair_id": 7,
+        "affaire_id": 7,
         "start_date": datetime.combine(START_DATE + timedelta(days=12), datetime.min.time().replace(hour=8)),  # Slot 24 (Jour 13 AM)
         "duration_hours": 10.5,  # 3 slots
         "name": "Test Eta"
@@ -163,7 +163,7 @@ TASKS = [
     {
         "id": str(uuid.uuid4()),
         "operator_id": 7,
-        "affair_id": 3,
+        "affaire_id": 3,
         "start_date": datetime.combine(START_DATE + timedelta(days=13), datetime.min.time().replace(hour=15)),  # Slot 27 (Jour 14 PM)
         "duration_hours": 17.5,  # 5 slots
         "name": "Code Gamma"
@@ -171,7 +171,7 @@ TASKS = [
     {
         "id": str(uuid.uuid4()),
         "operator_id": 8,
-        "affair_id": 4,
+        "affaire_id": 4,
         "start_date": datetime.combine(START_DATE + timedelta(days=15), datetime.min.time().replace(hour=8)),  # Slot 30 (Jour 16 AM)
         "duration_hours": 14,  # 4 slots
         "name": "QA Delta"
@@ -179,7 +179,7 @@ TASKS = [
     {
         "id": str(uuid.uuid4()),
         "operator_id": 9,
-        "affair_id": 5,
+        "affaire_id": 5,
         "start_date": datetime.combine(START_DATE + timedelta(days=16), datetime.min.time().replace(hour=15)),  # Slot 33 (Jour 17 PM)
         "duration_hours": 10.5,  # 3 slots
         "name": "Doc Epsilon"
@@ -187,7 +187,7 @@ TASKS = [
     {
         "id": str(uuid.uuid4()),
         "operator_id": 9,
-        "affair_id": 1,
+        "affaire_id": 1,
         "start_date": datetime.combine(START_DATE + timedelta(days=18), datetime.min.time().replace(hour=8)),  # Slot 36 (Jour 19 AM)
         "duration_hours": 14,  # 4 slots
         "name": "Review Alpha"
@@ -195,7 +195,7 @@ TASKS = [
     {
         "id": str(uuid.uuid4()),
         "operator_id": 10,
-        "affair_id": 6,
+        "affaire_id": 6,
         "start_date": datetime.combine(START_DATE + timedelta(days=20), datetime.min.time().replace(hour=8)),  # Slot 40 (Jour 21 AM)
         "duration_hours": 21,  # 6 slots
         "name": "Arch Zeta"
@@ -264,8 +264,8 @@ def update_task_from_slots(task, start_slot, duration_slots):
     task["start_date"] = start_datetime
     task["duration_hours"] = duration_hours
 
-def get_affair_by_id(affair_id):
-    return next((affair for affair in AFFAIRS if affair["id"] == affair_id), None)
+def get_affair_by_id(affaire_id):
+    return next((affair for affair in AFFAIRS if affair["id"] == affaire_id), None)
 
 def get_operator_by_id(operator_id):
     return next((operator for operator in OPERATORS if operator["id"] == operator_id), None)

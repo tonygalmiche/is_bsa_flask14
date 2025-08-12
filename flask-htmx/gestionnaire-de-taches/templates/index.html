@@ -89,13 +89,13 @@
                                 <!-- Tâches pour cet opérateur -->
                                 {% for task in tasks %}
                                 {% if task.operator_id == operator.id %}
-                                {% set affair = affairs|selectattr("id", "equalto", task.affair_id)|first %}
+                                {% set affair = affairs|selectattr("id", "equalto", task.affaire_id)|first %}
                                 <div class="task" 
                                      data-task-id="{{ task.id }}"
                                      data-operator-id="{{ task.operator_id }}"
                                      data-start-slot="{{ task.start_slot }}"
                                      data-duration="{{ task.duration }}"
-                                     data-affair-id="{{ task.affair_id }}"
+                                     data-affair-id="{{ task.affaire_id }}"
                                      data-title="{{ task.name }}"
                                      data-affair-name="{{ affair.name }}"
                                      style="background-color: {{ affair.color }}; 

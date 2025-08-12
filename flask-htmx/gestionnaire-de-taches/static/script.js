@@ -641,7 +641,7 @@ function updateTaskPositions(tasks, affairs, targetTaskId = null) {
             taskElement.dataset.operatorId = taskData.operator_id;
             taskElement.dataset.startSlot = taskData.start_slot;
             taskElement.dataset.duration = taskData.duration;
-            taskElement.dataset.affairId = taskData.affair_id;
+            taskElement.dataset.affairId = taskData.affaire_id;
             
             if (isTargetTask || isRecentlyResized) {
                 console.log(`📤 APRÈS - Tâche ${taskData.id}: durée=${taskData.duration}, slot=${taskData.start_slot}, opérateur=${taskData.operator_id}`);
