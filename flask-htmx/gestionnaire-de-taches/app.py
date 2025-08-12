@@ -248,14 +248,16 @@ def update_task_in_database(task_id, operator_id, start_date, duration_hours):
         paris_tz = pytz.timezone('Europe/Paris')
         utc_tz = pytz.UTC
         
-        # Convertir la date de Paris vers UTC pour stockage en base
+        # Convertir la date de l'application vers UTC pour stockage en base
+        # start_date dans l'application est naive et représente l'heure locale (Paris)
         if start_date.tzinfo is None:
-            # Supposer que c'est une heure de Paris naive
-            start_date_paris = paris_tz.localize(start_date)
+            # Utiliser localize() avec normalize() pour gérer correctement l'heure d'été
+            start_date_paris = paris_tz.normalize(paris_tz.localize(start_date))
         else:
+            # Si elle a déjà une timezone, la convertir vers Paris
             start_date_paris = start_date.astimezone(paris_tz)
         
-        # Convertir vers UTC pour stockage
+        # Convertir vers UTC pour stockage en base
         start_date_utc = start_date_paris.astimezone(utc_tz)
         
         with conn.cursor() as cursor:
@@ -295,14 +297,16 @@ def update_multiple_tasks_in_database(tasks_data):
                 start_date = task_data['start_date']
                 duration_hours = task_data['duration_hours']
                 
-                # Convertir la date de Paris vers UTC pour stockage en base
+                # Convertir la date de l'application vers UTC pour stockage en base
+                # start_date dans l'application est naive et représente l'heure locale (Paris)
                 if start_date.tzinfo is None:
-                    # Supposer que c'est une heure de Paris naive
-                    start_date_paris = paris_tz.localize(start_date)
+                    # Utiliser localize() avec normalize() pour gérer correctement l'heure d'été
+                    start_date_paris = paris_tz.normalize(paris_tz.localize(start_date))
                 else:
+                    # Si elle a déjà une timezone, la convertir vers Paris
                     start_date_paris = start_date.astimezone(paris_tz)
                 
-                # Convertir vers UTC pour stockage
+                # Convertir vers UTC pour stockage en base
                 start_date_utc = start_date_paris.astimezone(utc_tz)
                 
                 cursor.execute("""
@@ -1251,6 +1255,37 @@ def get_affairs():
 def get_operators():
     """Retourne la liste des opérateurs"""
     return jsonify({"operators": OPERATORS})
+
+@app.route('/test_timezone_conversion')
+def test_timezone_conversion():
+    """Endpoint de test pour vérifier la conversion des fuseaux horaires"""
+    import pytz
+    
+    paris_tz = pytz.timezone('Europe/Paris')
+    utc_tz = pytz.UTC
+    
+    # Test avec les heures de créneaux
+    test_cases = [
+        datetime(2025, 8, 26, 8, 0),   # 26 août 8H (AM)
+        datetime(2025, 8, 26, 14, 0),  # 26 août 14H (PM)
+        datetime(2025, 1, 15, 8, 0),   # 15 janvier 8H (hiver)
+        datetime(2025, 1, 15, 14, 0),  # 15 janvier 14H (hiver)
+    ]
+    
+    results = []
+    for naive_date in test_cases:
+        # Conversion Paris → UTC (comme dans update_task_in_database)
+        paris_date = paris_tz.normalize(paris_tz.localize(naive_date))
+        utc_date = paris_date.astimezone(utc_tz)
+        
+        results.append({
+            "naive_paris": naive_date.strftime("%Y-%m-%d %H:%M:%S"),
+            "paris_with_tz": paris_date.strftime("%Y-%m-%d %H:%M:%S %Z"),
+            "utc": utc_date.strftime("%Y-%m-%d %H:%M:%S %Z"),
+            "offset": paris_date.strftime("%z")
+        })
+    
+    return jsonify({"timezone_conversion_test": results})
 
 if __name__ == '__main__':
     #app.run(debug=True)
