@@ -11,8 +11,6 @@ import pytz
 try:
     from config import DATABASE_CONFIG
 except ImportError:
-    print("ERREUR: Fichier config.py non trouvé!")
-    print("Veuillez copier config.example.py vers config.py et modifier les paramètres de connexion.")
     sys.exit(1)
 
 app = Flask(__name__)
@@ -126,7 +124,7 @@ def get_default_operators():
             "name": "Jean Dupont",
             "absences": [
                 datetime(2025, 8, 12, 8, 0),   # 12 août AM
-                datetime(2025, 8, 20, 15, 0),  # 20 août PM
+                datetime(2025, 8, 20, 14, 0),  # 20 août PM
             ]
         },
         {
@@ -186,8 +184,8 @@ def load_tasks_from_db():
                     # Slot AM (8H)
                     adjusted_start_date = start_date_paris.replace(hour=8, minute=0, second=0, microsecond=0)
                 else:
-                    # Slot PM (15H)
-                    adjusted_start_date = start_date_paris.replace(hour=15, minute=0, second=0, microsecond=0)
+                    # Slot PM (14H)
+                    adjusted_start_date = start_date_paris.replace(hour=14, minute=0, second=0, microsecond=0)
                 
                 # Convertir en datetime naïf (sans timezone) pour compatibilité avec le reste du code
                 adjusted_start_date = adjusted_start_date.replace(tzinfo=None)
@@ -239,12 +237,96 @@ def get_default_tasks():
         }
     ]
 
+def update_task_in_database(task_id, operator_id, start_date, duration_hours):
+    """Met à jour une tâche dans la base de données PostgreSQL"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return False
+        
+        # Définir les fuseaux horaires
+        paris_tz = pytz.timezone('Europe/Paris')
+        utc_tz = pytz.UTC
+        
+        # Convertir la date de Paris vers UTC pour stockage en base
+        if start_date.tzinfo is None:
+            # Supposer que c'est une heure de Paris naive
+            start_date_paris = paris_tz.localize(start_date)
+        else:
+            start_date_paris = start_date.astimezone(paris_tz)
+        
+        # Convertir vers UTC pour stockage
+        start_date_utc = start_date_paris.astimezone(utc_tz)
+        
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                UPDATE is_gestion_tache 
+                SET operator_id = %s, start_date = %s, duration_hours = %s
+                WHERE id = %s
+            """, (operator_id, start_date_utc, duration_hours, int(task_id)))
+            
+            rows_affected = cursor.rowcount
+            conn.commit()
+            conn.close()
+            
+            return rows_affected > 0
+            
+    except Exception as e:
+        if conn:
+            conn.rollback()
+            conn.close()
+        return False
+
+def update_multiple_tasks_in_database(tasks_data):
+    """Met à jour plusieurs tâches dans la base de données en une transaction"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return False
+        
+        # Définir les fuseaux horaires
+        paris_tz = pytz.timezone('Europe/Paris')
+        utc_tz = pytz.UTC
+        
+        with conn.cursor() as cursor:
+            for task_data in tasks_data:
+                task_id = task_data['id']
+                operator_id = task_data['operator_id']
+                start_date = task_data['start_date']
+                duration_hours = task_data['duration_hours']
+                
+                # Convertir la date de Paris vers UTC pour stockage en base
+                if start_date.tzinfo is None:
+                    # Supposer que c'est une heure de Paris naive
+                    start_date_paris = paris_tz.localize(start_date)
+                else:
+                    start_date_paris = start_date.astimezone(paris_tz)
+                
+                # Convertir vers UTC pour stockage
+                start_date_utc = start_date_paris.astimezone(utc_tz)
+                
+                cursor.execute("""
+                    UPDATE is_gestion_tache 
+                    SET operator_id = %s, start_date = %s, duration_hours = %s
+                    WHERE id = %s
+                """, (operator_id, start_date_utc, duration_hours, int(task_id)))
+            
+            conn.commit()
+            conn.close()
+            return True
+            
+    except Exception as e:
+        if conn:
+            conn.rollback()
+            conn.close()
+        return False
+
 # Dates de congés (orange clair) - format datetime
 VACATION_DATES = [
     datetime(2025, 8, 15, 8, 0),   # 15 août AM
-    datetime(2025, 8, 15, 15, 0),  # 15 août PM
+    datetime(2025, 8, 15, 14, 0),  # 15 août PM
     datetime(2025, 8, 25, 8, 0),   # 25 août AM
-    datetime(2025, 8, 25, 15, 0),  # 25 août PM
+    datetime(2025, 8, 25, 14, 0),  # 25 août PM
 ]
 
 # Chargement dynamique des opérateurs depuis la base de données
@@ -297,9 +379,9 @@ def slot_to_date(slot):
     
     result_date = START_DATE + timedelta(days=days_offset)
     
-    # Ajuster selon la nouvelle logique : AM = 8H, PM = 15H (mais basé sur 12H)
+    # Ajuster selon la nouvelle logique : AM = 8H, PM = 14H (mais basé sur 12H)
     if is_pm:
-        result_datetime = datetime.combine(result_date, datetime.min.time().replace(hour=15))
+        result_datetime = datetime.combine(result_date, datetime.min.time().replace(hour=14))
     else:
         result_datetime = datetime.combine(result_date, datetime.min.time().replace(hour=8))
     
@@ -800,8 +882,13 @@ def move_task():
             if collision:
                 resolve_all_collisions_on_operator(new_operator_id)
         
-        # TODO: Ici vous pourrez ajouter la mise à jour PostgreSQL
-        # update_task_in_database(task_id, new_operator_id, task["start_date"], task["duration_hours"])
+        # Mise à jour de la base de données PostgreSQL
+        db_success = update_task_in_database(task_id, new_operator_id, task["start_date"], task["duration_hours"])
+        if not db_success:
+            # En cas d'échec de la base de données, annuler les modifications en mémoire
+            task["operator_id"] = old_operator_id
+            update_task_from_slots(task, old_start_slot, duration_slots)
+            return jsonify({"success": False, "error": "Erreur lors de la mise à jour en base de données"})
         
         return jsonify({"success": True})
     
@@ -819,9 +906,12 @@ def keyboard_move_task():
         if direction in ['left', 'right']:
             result = handle_keyboard_push(task_id, direction)
             if result["success"]:
-                # TODO: Ici vous pourrez ajouter la mise à jour PostgreSQL pour toutes les tâches modifiées
-                # update_tasks_in_database()
-                pass
+                # Mise à jour de la base de données PostgreSQL
+                task = next((t for t in TASKS if t["id"] == task_id), None)
+                if task:
+                    db_success = update_task_in_database(task_id, task["operator_id"], task["start_date"], task["duration_hours"])
+                    if not db_success:
+                        return jsonify({"success": False, "error": "Erreur lors de la mise à jour en base de données"})
             return jsonify(result)
         
         elif direction in ['up', 'down']:
@@ -861,8 +951,12 @@ def keyboard_move_task():
                     # Le déplacement est possible, effectuer le changement d'opérateur
                     task["operator_id"] = new_operator_id
                     
-                    # TODO: Mise à jour PostgreSQL
-                    # update_task_in_database(task_id, new_operator_id, task["start_date"], task["duration_hours"])
+                    # Mise à jour de la base de données PostgreSQL
+                    db_success = update_task_in_database(task_id, new_operator_id, task["start_date"], task["duration_hours"])
+                    if not db_success:
+                        # En cas d'échec de la base de données, annuler les modifications en mémoire
+                        task["operator_id"] = old_operator_id
+                        return jsonify({"success": False, "error": "Erreur lors de la mise à jour en base de données"})
                 else:
                     # Le déplacement n'est pas possible, garder l'opérateur actuel
                     return jsonify({"success": False, "error": "Impossible de déplacer la tâche vers cet opérateur : pas assez d'espace"})
@@ -914,6 +1008,13 @@ def resize_task():
         collision = check_collision(task["operator_id"], start_slot, new_duration_slots, task_id)
         if collision:
             resolve_all_collisions_on_operator(task["operator_id"])
+        
+        # Mise à jour de la base de données PostgreSQL
+        db_success = update_task_in_database(task_id, task["operator_id"], task["start_date"], task["duration_hours"])
+        if not db_success:
+            # En cas d'échec de la base de données, annuler les modifications en mémoire
+            update_task_from_slots(task, start_slot, old_duration_slots)
+            return jsonify({"success": False, "error": "Erreur lors de la mise à jour en base de données"})
         
         return jsonify({"success": True})
     
@@ -981,6 +1082,14 @@ def resize_and_move_task():
         # Résoudre aussi les collisions sur l'ancien opérateur si différent
         if old_operator_id != operator_id:
             resolve_all_collisions_on_operator(old_operator_id)
+        
+        # Mise à jour de la base de données PostgreSQL
+        db_success = update_task_in_database(task_id, operator_id, task["start_date"], task["duration_hours"])
+        if not db_success:
+            # En cas d'échec de la base de données, annuler les modifications en mémoire
+            task["operator_id"] = old_operator_id
+            update_task_from_slots(task, old_start_slot, old_duration_slots)
+            return jsonify({"success": False, "error": "Erreur lors de la mise à jour en base de données"})
         
         return jsonify({"success": True})
     
