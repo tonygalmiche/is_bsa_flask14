@@ -9,7 +9,6 @@ let recentlyResizedTasks = new Set(); // Protection contre l'écrasement après 
 
 // Initialisation
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Planning des opérateurs initialisé');
     setupEventListeners();
     setupScrollSync();
     setupDragAndDrop();
@@ -21,11 +20,8 @@ function setupScrollSync() {
     const timeHeaderSlotsInner = document.querySelector('.time-header-slots-inner');
     
     if (!horizontalScrollbar || timeSlotContainers.length === 0) {
-        console.log('⚠️ Éléments de scroll non trouvés');
         return;
     }
-    
-    console.log(`✅ Synchronisation configurée: 1 scrollbar + ${timeSlotContainers.length} containers`);
     
     let isScrolling = false;
     let lastScrollLeft = horizontalScrollbar.scrollLeft;
@@ -258,7 +254,6 @@ function handleResize(e) {
         
     } else if (resizeMode === 'left') {
         // Redimensionnement vers la gauche DÉSACTIVÉ pour simplifier le code
-        console.log('⚠️ Redimensionnement vers la gauche désactivé');
         return; // Ne rien faire
     }
 }
@@ -275,8 +270,6 @@ function stopResize(e) {
         const newDuration = parseInt(task.dataset.duration);
         const newStartSlot = parseInt(task.dataset.startSlot);
         
-        console.log('AVANT resize/move_task - Durée:', newDuration, 'StartSlot:', newStartSlot);
-        
         // Vérification avant envoi
         if (newDuration && newDuration > 0) {
             // Protéger cette tâche contre l'écrasement pendant 2 secondes
@@ -288,7 +281,6 @@ function stopResize(e) {
             // Seul le redimensionnement à droite est supporté maintenant
             resizeTask(taskId, newDuration);
         } else {
-            console.error('Durée invalide lors du redimensionnement:', newDuration);
             showNotification('Erreur: durée invalide lors du redimensionnement', 'error');
         }
     }
@@ -372,15 +364,14 @@ function keyboardMoveTask(taskId, direction) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Utiliser refreshPlanning AVEC scroll automatique pour tous les déplacements clavier
-            refreshPlanning(taskId, true);
+            // Utiliser refreshPlanning AVEC scroll automatique seulement pour les changements d'opérateur (vertical)
+            const autoScroll = (direction === 'up' || direction === 'down');
+            refreshPlanning(taskId, autoScroll);
         } else {
-            console.error('❌ Erreur lors du déplacement:', data.error);
             showNotification('Erreur lors du déplacement de la tâche', 'error');
         }
     })
     .catch(error => {
-        console.error('❌ Erreur réseau:', error);
         showNotification('Erreur de communication avec le serveur', 'error');
     });
 }
@@ -404,12 +395,10 @@ function moveTask(taskId, newOperatorId, newStartSlot) {
             // Rafraîchir complètement le planning pour voir toutes les tâches poussées AVEC scroll automatique
             refreshPlanning(taskId, true); // true = avec scroll automatique pour drag & drop
         } else {
-            console.error('❌ Erreur lors du déplacement:', data.error);
             showNotification('Erreur lors du déplacement de la tâche', 'error');
         }
     })
     .catch(error => {
-        console.error('❌ Erreur réseau:', error);
         showNotification('Erreur de communication avec le serveur', 'error');
     });
 }
@@ -533,8 +522,6 @@ function resizeTask(taskId, newDuration, newStartSlot = null, operatorId = null)
     })
     .then(response => response.json())
     .then(data => {
-        console.log('📥 APRÈS resize_task - Réponse serveur:', data.success ? 'succès' : data.error);
-        
         if (data.success) {
             // Récupérer les données mises à jour du serveur après redimensionnement réussi
             recentlyResizedTasks.delete(taskId);
@@ -544,7 +531,6 @@ function resizeTask(taskId, newDuration, newStartSlot = null, operatorId = null)
                 refreshPlanning(taskId, true); // true = avec scroll automatique pour redimensionnement
             }, 50);
         } else {
-            console.error('❌ Erreur lors du redimensionnement:', data.error);
             showNotification('Erreur lors du redimensionnement de la tâche', 'error');
             
             // En cas d'erreur, restaurer la taille originale
@@ -556,7 +542,6 @@ function resizeTask(taskId, newDuration, newStartSlot = null, operatorId = null)
         }
     })
     .catch(error => {
-        console.error('❌ Erreur réseau:', error);
         showNotification('Erreur de communication avec le serveur', 'error');
         
         // En cas d'erreur réseau, restaurer la taille originale
@@ -581,16 +566,20 @@ function refreshPlanning(taskIdToKeepFocused = null, autoScroll = true) {
             const restoreFocus = () => {
                 const taskToFocus = document.querySelector(`[data-task-id="${taskIdToKeepFocused}"]`);
                 if (taskToFocus) {
-                    // Nettoyer d'abord toutes les sélections
-                    document.querySelectorAll('.task').forEach(t => {
-                        t.classList.remove('selected');
-                        t.blur();
-                    });
+                    // S'assurer que la tâche reste sélectionnée et focalisée
+                    if (!taskToFocus.classList.contains('selected')) {
+                        // Nettoyer d'abord toutes les sélections
+                        document.querySelectorAll('.task').forEach(t => {
+                            t.classList.remove('selected');
+                        });
+                        
+                        // Sélectionner et focus sur la bonne tâche
+                        taskToFocus.classList.add('selected');
+                        selectedTask = taskToFocus;
+                    }
                     
-                    // Sélectionner et focus sur la bonne tâche
-                    taskToFocus.classList.add('selected');
+                    // Toujours remettre le focus
                     taskToFocus.focus();
-                    selectedTask = taskToFocus;
                     
                     // Faire défiler pour suivre la tâche après mise à jour SEULEMENT si autoScroll est true
                     if (autoScroll) {
@@ -599,53 +588,38 @@ function refreshPlanning(taskIdToKeepFocused = null, autoScroll = true) {
                         scrollToFollowTask(taskToFocus, newStartSlot, newDuration);
                     }
                     
-                    console.log('Focus restauré sur la tâche:', taskIdToKeepFocused, autoScroll ? '(avec scroll)' : '(sans scroll)');
                     return true;
                 }
                 return false;
             };
             
-            // Essayer immédiatement, puis avec des délais croissants si nécessaire
+            // Essayer immédiatement, puis avec des délais plus courts si nécessaire
             if (!restoreFocus()) {
                 setTimeout(() => {
                     if (!restoreFocus()) {
-                        setTimeout(restoreFocus, 100);
+                        setTimeout(restoreFocus, 50);
                     }
-                }, 50);
+                }, 20);
             }
         }
     })
     .catch(error => {
-        console.error('Erreur lors du rafraîchissement:', error);
+        showNotification('Erreur lors du rafraîchissement', 'error');
         // En cas d'erreur, on recharge la page comme fallback
         window.location.reload();
     });
 }
 
 function updateTaskPositions(tasks, affairs, targetTaskId = null) {
-    console.log('🔄 UPDATE_TASK_POSITIONS: Mise à jour des positions');
-    
     // Mettre à jour les positions de toutes les tâches
     tasks.forEach(taskData => {
         const taskElement = document.querySelector(`[data-task-id="${taskData.id}"]`);
         if (taskElement) {
-            // Ne logguer que la tâche ciblée ou celle récemment redimensionnée
-            const isTargetTask = targetTaskId === taskData.id;
-            const isRecentlyResized = recentlyResizedTasks.has(taskData.id);
-            
-            if (isTargetTask || isRecentlyResized) {
-                console.log(`📥 AVANT - Tâche ${taskData.id}: durée=${taskElement.dataset.duration}, slot=${taskElement.dataset.startSlot}, opérateur=${taskElement.dataset.operatorId}`);
-            }
-            
             // Mettre à jour les données
             taskElement.dataset.operatorId = taskData.operator_id;
             taskElement.dataset.startSlot = taskData.start_slot;
             taskElement.dataset.duration = taskData.duration;
             taskElement.dataset.affairId = taskData.affaire_id;
-            
-            if (isTargetTask || isRecentlyResized) {
-                console.log(`📤 APRÈS - Tâche ${taskData.id}: durée=${taskData.duration}, slot=${taskData.start_slot}, opérateur=${taskData.operator_id}`);
-            }
             
             // Ne pas écraser la position/taille si la tâche est en cours de redimensionnement
             // ou a été récemment redimensionnée
@@ -809,7 +783,6 @@ document.addEventListener('touchmove', function(e) {
 document.addEventListener('touchend', function(e) {
     if (e.target.closest('.task') && isTouchDrag) {
         // Implémenter le déplacement tactile si nécessaire
-        console.log('Déplacement tactile détecté');
     }
     isTouchDrag = false;
 });

@@ -39,28 +39,20 @@ HALF_DAY_HOURS = DAY_DURATION_HOURS / 2  # Durée d'une demi-journée (AM ou PM)
 # Fonctions de base de données
 def get_db_connection():
     """Établit une connexion à la base PostgreSQL"""
-    print(f"🔗 Tentative de connexion avec: {DATABASE_CONFIG}")
     try:
         conn = psycopg2.connect(**DATABASE_CONFIG)
-        print("✅ Connexion PostgreSQL réussie")
         return conn
     except psycopg2.Error as e:
-        print(f"❌ Erreur de connexion à la base de données: {e}")
         return None
 
 def load_affaires_from_db():
     """Charge les affaires depuis la base PostgreSQL"""
-    print("🔄 Tentative de chargement des affaires depuis la base de données...")
     try:
         conn = get_db_connection()
         if not conn:
-            print("❌ Impossible de se connecter à la base de données, utilisation des données par défaut")
             return get_default_affaires()
         
-        print("✅ Connexion à la base de données établie")
-        
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            print("📊 Exécution de la requête SQL...")
             cursor.execute("""
                 SELECT id, name, color 
                 FROM is_gestion_tache_affaire 
@@ -68,12 +60,9 @@ def load_affaires_from_db():
             """)
             
             rows = cursor.fetchall()
-            print(f"📋 {len(rows)} lignes récupérées de la base")
-            
             affaires = []
             
             for i, row in enumerate(rows):
-                print(f"  Ligne {i+1}: ID={row['id']}, Name='{row['name']}', Color='{row['color']}'")
                 affaires.append({
                     "id": row['id'],
                     "name": row['name'],
@@ -81,13 +70,9 @@ def load_affaires_from_db():
                 })
             
             conn.close()
-            print(f"✅ {len(affaires)} affaires chargées depuis la base de données")
-            print(f"📦 Données finales: {affaires}")
             return affaires
             
     except Exception as e:
-        print(f"❌ Erreur lors du chargement des affaires: {e}")
-        print("🔄 Utilisation des données par défaut")
         return get_default_affaires()
 
 def get_default_affaires():
@@ -105,17 +90,12 @@ def get_default_affaires():
 
 def load_operators_from_db():
     """Charge les opérateurs depuis la base PostgreSQL"""
-    print("👥 Tentative de chargement des opérateurs depuis la base de données...")
     try:
         conn = get_db_connection()
         if not conn:
-            print("❌ Impossible de se connecter à la base de données, utilisation des données par défaut")
             return get_default_operators()
         
-        print("✅ Connexion à la base de données établie pour les opérateurs")
-        
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            print("📊 Exécution de la requête SQL pour les opérateurs...")
             cursor.execute("""
                 SELECT id, name 
                 FROM hr_employee 
@@ -123,12 +103,9 @@ def load_operators_from_db():
             """)
             
             rows = cursor.fetchall()
-            print(f"📋 {len(rows)} opérateurs récupérés de la base")
-            
             operators = []
             
             for i, row in enumerate(rows):
-                print(f"  Opérateur {i+1}: ID={row['id']}, Name='{row['name']}'")
                 operators.append({
                     "id": row['id'],
                     "name": row['name'],
@@ -136,13 +113,9 @@ def load_operators_from_db():
                 })
             
             conn.close()
-            print(f"✅ {len(operators)} opérateurs chargés depuis la base de données")
-            print(f"📦 Données opérateurs finales: {operators}")
             return operators
             
     except Exception as e:
-        print(f"❌ Erreur lors du chargement des opérateurs: {e}")
-        print("🔄 Utilisation des données par défaut pour les opérateurs")
         return get_default_operators()
 
 def get_default_operators():
@@ -175,21 +148,16 @@ def get_default_operators():
 
 def load_tasks_from_db():
     """Charge les tâches depuis la base PostgreSQL"""
-    print("📋 Tentative de chargement des tâches depuis la base de données...")
     try:
         conn = get_db_connection()
         if not conn:
-            print("❌ Impossible de se connecter à la base de données, utilisation des données par défaut")
             return get_default_tasks()
-        
-        print("✅ Connexion à la base de données établie pour les tâches")
         
         # Définir les fuseaux horaires
         utc_tz = pytz.UTC
         paris_tz = pytz.timezone('Europe/Paris')
         
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            print("📊 Exécution de la requête SQL pour les tâches...")
             cursor.execute("""
                 SELECT id, name, operator_id, affaire as affaire_id, start_date, duration_hours
                 FROM is_gestion_tache 
@@ -197,13 +165,9 @@ def load_tasks_from_db():
             """)
             
             rows = cursor.fetchall()
-            print(f"📋 {len(rows)} tâches récupérées de la base")
-            
             tasks = []
             
             for i, row in enumerate(rows):
-                print(f"  Tâche {i+1}: ID={row['id']}, Name='{row['name']}', Operator={row['operator_id']}, Affaire={row['affaire_id']}")
-                
                 # Convertir l'heure UTC en heure de Paris
                 start_date_utc = row['start_date']
                 if start_date_utc.tzinfo is None:
@@ -228,10 +192,6 @@ def load_tasks_from_db():
                 # Convertir en datetime naïf (sans timezone) pour compatibilité avec le reste du code
                 adjusted_start_date = adjusted_start_date.replace(tzinfo=None)
                 
-                print(f"    UTC: {start_date_utc.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-                print(f"    Paris: {start_date_paris.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-                print(f"    Slot: {'AM' if paris_hour < 12 else 'PM'} -> {adjusted_start_date.strftime('%Y-%m-%d %H:%M:%S')}")
-                
                 # Convertir les données de la base vers le format attendu par l'application
                 task = {
                     "id": str(row['id']),  # Convertir en string pour compatibilité
@@ -245,13 +205,9 @@ def load_tasks_from_db():
                 tasks.append(task)
             
             conn.close()
-            print(f"✅ {len(tasks)} tâches chargées depuis la base de données")
-            print(f"📦 Données tâches finales: {tasks}")
             return tasks
             
     except Exception as e:
-        print(f"❌ Erreur lors du chargement des tâches: {e}")
-        print("🔄 Utilisation des données par défaut pour les tâches")
         return get_default_tasks()
 
 def get_default_tasks():
@@ -292,19 +248,13 @@ VACATION_DATES = [
 ]
 
 # Chargement dynamique des opérateurs depuis la base de données
-print("👥 Initialisation: Chargement des opérateurs...")
 OPERATORS = load_operators_from_db()
-print(f"🎯 Variable OPERATORS initialisée avec {len(OPERATORS)} éléments: {OPERATORS}")
 
 # Chargement dynamique des affaires depuis la base de données
-print("🚀 Initialisation: Chargement des affaires...")
 AFFAIRES = load_affaires_from_db()
-print(f"🎯 Variable AFFAIRES initialisée avec {len(AFFAIRES)} éléments: {AFFAIRES}")
 
 # Chargement dynamique des tâches depuis la base de données
-print("📋 Initialisation: Chargement des tâches...")
 TASKS = load_tasks_from_db()
-print(f"🎯 Variable TASKS initialisée avec {len(TASKS)} éléments")
 
 def date_to_slot(task_date):
     """Convertit une date/datetime en numéro de slot"""
@@ -689,9 +639,6 @@ def resolve_all_collisions_on_operator(operator_id):
 
 @app.route('/')
 def index():
-    print("🏠 Route index() appelée")
-    print(f"📋 AFFAIRES disponibles: {AFFAIRES}")
-    
     # Générer les en-têtes de colonnes (NUM_SLOTS demi-journées)
     time_slots = []
     months = []
@@ -755,26 +702,18 @@ def index():
     
     # Convertir les tâches pour l'affichage (compatibilité avec le template)
     display_tasks = []
-    print(f"📝 Nombre de tâches à traiter: {len(TASKS)}")
     
     for i, task in enumerate(TASKS):
-        print(f"  Tâche {i+1}: {task['name']} (affaire_id: {task['affaire_id']})")
-        
         # Vérifier si l'affaire existe
         affair = get_affair_by_id(task['affaire_id'])
         if not affair:
-            print(f"    ⚠️  Affaire ID {task['affaire_id']} non trouvée pour la tâche {task['name']}")
             # Utiliser l'affaire par défaut ou sauter cette tâche
             continue
-        else:
-            print(f"    ✅ Affaire trouvée: {affair['name']}")
         
         display_task = task.copy()
         display_task["start_slot"] = get_task_start_slot(task)
         display_task["duration"] = get_task_duration_slots(task)
         display_tasks.append(display_task)
-    
-    print(f"📊 Tâches finales pour le template: {len(display_tasks)}")
     
     # Filtrer les opérateurs qui ont au moins une tâche affichée
     operators_with_tasks = set()
@@ -783,7 +722,6 @@ def index():
     
     # Garder seulement les opérateurs qui ont des tâches
     filtered_operators = [op for op in OPERATORS if op['id'] in operators_with_tasks]
-    print(f"👥 Opérateurs avec tâches: {len(filtered_operators)} sur {len(OPERATORS)}")
     
     # Pré-calculer les informations d'absence pour chaque opérateur filtré et slot
     operator_absences = {}
@@ -792,7 +730,6 @@ def index():
         for i in range(NUM_SLOTS):
             operator_absences[operator["id"]][i] = is_absence_slot(operator["id"], i)
     
-    print("🎨 Rendu du template...")
     return render_template('index.html', 
                          operators=filtered_operators,  # Utiliser la liste filtrée
                          time_slots=time_slots,
@@ -903,15 +840,10 @@ def keyboard_move_task():
             # Obtenir la liste triée des IDs d'opérateurs qui ont des tâches
             visible_operator_ids = sorted([op['id'] for op in OPERATORS if op['id'] in operators_with_tasks])
             
-            print(f"🎯 Déplacement vertical - Opérateur actuel: {current_operator_id}")
-            print(f"📋 Opérateurs visibles: {visible_operator_ids}")
-            
             # Trouver la position actuelle dans la liste filtrée
             try:
                 current_index = visible_operator_ids.index(current_operator_id)
-                print(f"📍 Index actuel: {current_index}")
             except ValueError:
-                print(f"❌ Opérateur {current_operator_id} non trouvé dans la liste visible")
                 return jsonify({"success": False, "error": "Opérateur actuel introuvable"})
             
             new_operator_id = current_operator_id
@@ -919,8 +851,6 @@ def keyboard_move_task():
                 new_operator_id = visible_operator_ids[current_index - 1]
             elif direction == 'down' and current_index < len(visible_operator_ids) - 1:
                 new_operator_id = visible_operator_ids[current_index + 1]
-            
-            print(f"🎯 Nouvel opérateur: {new_operator_id}")
             
             if new_operator_id != current_operator_id:
                 task["operator_id"] = new_operator_id
@@ -951,9 +881,6 @@ def resize_task():
         
         task_id = data.get('task_id')
         new_duration_raw = data.get('duration')
-        
-        # Log avant traitement
-        print(f"� RESIZE_TASK reçu - task_id: {task_id}, nouvelle durée: {new_duration_raw}")
         
         if not task_id:
             return jsonify({"success": False, "error": "ID de tâche manquant"})
@@ -986,13 +913,9 @@ def resize_task():
         if collision:
             resolve_all_collisions_on_operator(task["operator_id"])
         
-        # Log après traitement
-        print(f"📥 RESIZE_TASK traité - Durée changée de {old_duration_slots} à {new_duration_slots} slots")
-        
         return jsonify({"success": True})
     
     except Exception as e:
-        print(f"❌ Erreur dans resize_task: {str(e)}")
         return jsonify({"success": False, "error": f"Erreur serveur: {str(e)}"})
 
 @app.route('/resize_and_move_task', methods=['POST'])
@@ -1007,9 +930,6 @@ def resize_and_move_task():
         operator_id = data.get('operator_id')
         new_start_slot = data.get('start_slot')
         new_duration_raw = data.get('duration')
-        
-        # Log avant traitement
-        print(f"🔄 RESIZE_AND_MOVE_TASK reçu - task_id: {task_id}, operator: {operator_id}, start_slot: {new_start_slot}, durée: {new_duration_raw}")
         
         # Validation des paramètres
         if not task_id:
@@ -1060,13 +980,9 @@ def resize_and_move_task():
         if old_operator_id != operator_id:
             resolve_all_collisions_on_operator(old_operator_id)
         
-        # Log après traitement
-        print(f"📥 RESIZE_AND_MOVE_TASK traité - Position: {old_start_slot}→{new_start_slot}, Durée: {old_duration_slots}→{new_duration_slots} slots")
-        
         return jsonify({"success": True})
     
     except Exception as e:
-        print(f"❌ Erreur dans resize_and_move_task: {str(e)}")
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/get_planning_data')
@@ -1132,8 +1048,6 @@ def reload_data():
     """Recharge à la fois les opérateurs, les affaires et les tâches depuis la base de données"""
     global OPERATORS, AFFAIRES, TASKS
     try:
-        print("🔄 Rechargement complet des données...")
-        
         # Recharger les opérateurs
         new_operators = load_operators_from_db()
         operators_count = len(new_operators)
@@ -1152,7 +1066,6 @@ def reload_data():
         TASKS = new_tasks
         
         message = f"{operators_count} opérateurs, {affaires_count} affaires et {tasks_count} tâches rechargés"
-        print(f"✅ {message}")
         
         return jsonify({
             "success": True, 
@@ -1162,7 +1075,6 @@ def reload_data():
             "tasks_count": tasks_count
         })
     except Exception as e:
-        print(f"❌ Erreur lors du rechargement complet: {e}")
         return jsonify({
             "success": False, 
             "message": f"Erreur lors du rechargement: {str(e)}"
