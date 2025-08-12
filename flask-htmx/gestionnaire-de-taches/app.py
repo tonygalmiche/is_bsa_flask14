@@ -786,6 +786,21 @@ def select_planning(planning_id):
 @app.route('/planning')
 def planning():
     """Page principale du planning des opérateurs"""
+    # Récupérer le nom du planning sélectionné
+    current_planning_name = "Planning non sélectionné"
+    if CURRENT_PLANNING_ID:
+        try:
+            conn = get_db_connection()
+            if conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("SELECT name FROM is_gestion_tache_planning WHERE id = %s", (CURRENT_PLANNING_ID,))
+                    result = cursor.fetchone()
+                    if result:
+                        current_planning_name = result['name']
+                conn.close()
+        except Exception:
+            pass  # En cas d'erreur, garder le nom par défaut
+    
     # Générer les en-têtes de colonnes (NUM_SLOTS demi-journées)
     time_slots = []
     months = []
@@ -891,7 +906,8 @@ def planning():
                          header_height=HEADER_HEIGHT,
                          num_slots=NUM_SLOTS,
                          start_date=START_DATE,
-                         day_duration_hours=DAY_DURATION_HOURS)
+                         day_duration_hours=DAY_DURATION_HOURS,
+                         current_planning_name=current_planning_name)
 
 @app.route('/change_database')
 def change_database():
