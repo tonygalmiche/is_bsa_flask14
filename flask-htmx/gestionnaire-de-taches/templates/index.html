@@ -18,7 +18,15 @@
 </head>
 <body>
     <div class="container">
-        <h1>Planning des Opérateurs</h1>
+        <div class="header-actions">
+            <h1>Planning des Opérateurs</h1>
+            <div class="action-buttons">
+                <button id="reload-affairs-btn" class="btn btn-secondary">
+                    🔄 Recharger les affaires
+                </button>
+                <span id="affairs-status" class="status-text">{{ affairs|length }} affaires chargées</span>
+            </div>
+        </div>
         
         <div class="planning-container">
             <!-- Conteneur global avec scroll horizontal unique -->

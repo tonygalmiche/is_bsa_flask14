@@ -2,6 +2,17 @@ from flask import Flask, render_template, request, jsonify
 import json
 from datetime import datetime, timedelta
 import uuid
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import sys
+import os
+
+try:
+    from config import DATABASE_CONFIG
+except ImportError:
+    print("ERREUR: Fichier config.py non trouvé!")
+    print("Veuillez copier config.example.py vers config.py et modifier les paramètres de connexion.")
+    sys.exit(1)
 
 app = Flask(__name__)
 
@@ -23,6 +34,73 @@ NUM_SLOTS = 90  # Nombre total de créneaux (triplé : 30 -> 90)
 START_DATE = datetime.now().date()  # Date de début du planning (date du jour par défaut)
 DAY_DURATION_HOURS = 7  # Durée d'une journée en heures
 HALF_DAY_HOURS = DAY_DURATION_HOURS / 2  # Durée d'une demi-journée (AM ou PM)
+
+# Fonctions de base de données
+def get_db_connection():
+    """Établit une connexion à la base PostgreSQL"""
+    print(f"🔗 Tentative de connexion avec: {DATABASE_CONFIG}")
+    try:
+        conn = psycopg2.connect(**DATABASE_CONFIG)
+        print("✅ Connexion PostgreSQL réussie")
+        return conn
+    except psycopg2.Error as e:
+        print(f"❌ Erreur de connexion à la base de données: {e}")
+        return None
+
+def load_affaires_from_db():
+    """Charge les affaires depuis la base PostgreSQL"""
+    print("🔄 Tentative de chargement des affaires depuis la base de données...")
+    try:
+        conn = get_db_connection()
+        if not conn:
+            print("❌ Impossible de se connecter à la base de données, utilisation des données par défaut")
+            return get_default_affaires()
+        
+        print("✅ Connexion à la base de données établie")
+        
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            print("📊 Exécution de la requête SQL...")
+            cursor.execute("""
+                SELECT id, name, color 
+                FROM is_gestion_tache_affaire 
+                ORDER BY name
+            """)
+            
+            rows = cursor.fetchall()
+            print(f"📋 {len(rows)} lignes récupérées de la base")
+            
+            affaires = []
+            
+            for i, row in enumerate(rows):
+                print(f"  Ligne {i+1}: ID={row['id']}, Name='{row['name']}', Color='{row['color']}'")
+                affaires.append({
+                    "id": row['id'],
+                    "name": row['name'],
+                    "color": row['color'] if row['color'] else "#808080"  # Couleur par défaut si NULL
+                })
+            
+            conn.close()
+            print(f"✅ {len(affaires)} affaires chargées depuis la base de données")
+            print(f"📦 Données finales: {affaires}")
+            return affaires
+            
+    except Exception as e:
+        print(f"❌ Erreur lors du chargement des affaires: {e}")
+        print("🔄 Utilisation des données par défaut")
+        return get_default_affaires()
+
+def get_default_affaires():
+    """Retourne les affaires par défaut en cas de problème de base de données"""
+    return [
+        {"id": 1, "name": "Projet Alpha", "color": "#FF6B6B"},
+        {"id": 2, "name": "Projet Beta", "color": "#4ECDC4"},
+        {"id": 3, "name": "Projet Gamma", "color": "#45B7D1"},
+        {"id": 4, "name": "Projet Delta", "color": "#96CEB4"},
+        {"id": 5, "name": "Projet Epsilon", "color": "#FFEAA7"},
+        {"id": 6, "name": "Projet Zeta", "color": "#DDA0DD"},
+        {"id": 7, "name": "Projet Eta", "color": "#FFB347"},
+        {"id": 8, "name": "Projet Theta", "color": "#98D8C8"}
+    ]
 
 # Dates de congés (orange clair) - format datetime
 VACATION_DATES = [
@@ -59,16 +137,10 @@ OPERATORS = [
     {"id": 10, "name": "Julie Garnier", "absences": []}
 ]
 
-AFFAIRS = [
-    {"id": 1, "name": "Projet Alpha", "color": "#FF6B6B"},
-    {"id": 2, "name": "Projet Beta", "color": "#4ECDC4"},
-    {"id": 3, "name": "Projet Gamma", "color": "#45B7D1"},
-    {"id": 4, "name": "Projet Delta", "color": "#96CEB4"},
-    {"id": 5, "name": "Projet Epsilon", "color": "#FFEAA7"},
-    {"id": 6, "name": "Projet Zeta", "color": "#DDA0DD"},
-    {"id": 7, "name": "Projet Eta", "color": "#FFB347"},
-    {"id": 8, "name": "Projet Theta", "color": "#98D8C8"}
-]
+# Chargement dynamique des affaires depuis la base de données
+print("🚀 Initialisation: Chargement des affaires...")
+AFFAIRES = load_affaires_from_db()
+print(f"🎯 Variable AFFAIRES initialisée avec {len(AFFAIRES)} éléments: {AFFAIRES}")
 
 # Planning initial avec tâches pré-remplies - RÉPARTI SANS COLLISIONS
 TASKS = [
@@ -265,7 +337,7 @@ def update_task_from_slots(task, start_slot, duration_slots):
     task["duration_hours"] = duration_hours
 
 def get_affair_by_id(affaire_id):
-    return next((affair for affair in AFFAIRS if affair["id"] == affaire_id), None)
+    return next((affair for affair in AFFAIRES if affair["id"] == affaire_id), None)
 
 def get_operator_by_id(operator_id):
     return next((operator for operator in OPERATORS if operator["id"] == operator_id), None)
@@ -582,6 +654,9 @@ def resolve_all_collisions_on_operator(operator_id):
 
 @app.route('/')
 def index():
+    print("🏠 Route index() appelée")
+    print(f"📋 AFFAIRES disponibles: {AFFAIRES}")
+    
     # Générer les en-têtes de colonnes (NUM_SLOTS demi-journées)
     time_slots = []
     months = []
@@ -645,11 +720,26 @@ def index():
     
     # Convertir les tâches pour l'affichage (compatibilité avec le template)
     display_tasks = []
-    for task in TASKS:
+    print(f"📝 Nombre de tâches à traiter: {len(TASKS)}")
+    
+    for i, task in enumerate(TASKS):
+        print(f"  Tâche {i+1}: {task['name']} (affaire_id: {task['affaire_id']})")
+        
+        # Vérifier si l'affaire existe
+        affair = get_affair_by_id(task['affaire_id'])
+        if not affair:
+            print(f"    ⚠️  Affaire ID {task['affaire_id']} non trouvée pour la tâche {task['name']}")
+            # Utiliser l'affaire par défaut ou sauter cette tâche
+            continue
+        else:
+            print(f"    ✅ Affaire trouvée: {affair['name']}")
+        
         display_task = task.copy()
         display_task["start_slot"] = get_task_start_slot(task)
         display_task["duration"] = get_task_duration_slots(task)
         display_tasks.append(display_task)
+    
+    print(f"📊 Tâches finales pour le template: {len(display_tasks)}")
     
     # Pré-calculer les informations d'absence pour chaque opérateur et slot
     operator_absences = {}
@@ -658,6 +748,7 @@ def index():
         for i in range(NUM_SLOTS):
             operator_absences[operator["id"]][i] = is_absence_slot(operator["id"], i)
     
+    print("🎨 Rendu du template...")
     return render_template('index.html', 
                          operators=OPERATORS, 
                          time_slots=time_slots,
@@ -665,7 +756,7 @@ def index():
                          weeks=weeks,
                          days=days,
                          tasks=display_tasks, 
-                         affairs=AFFAIRS,
+                         affairs=AFFAIRES,
                          operator_absences=operator_absences,
                          slot_width=SLOT_WIDTH,
                          row_height=ROW_HEIGHT,
@@ -927,7 +1018,7 @@ def get_planning_data():
     return jsonify({
         "tasks": display_tasks,
         "operators": OPERATORS,
-        "affairs": AFFAIRS
+        "affairs": AFFAIRES
     })
 
 @app.route('/debug_tasks')
@@ -961,6 +1052,28 @@ def debug_html():
         display_tasks.append(display_task)
     
     return jsonify(display_tasks)
+
+@app.route('/api/reload-affairs', methods=['POST'])
+def reload_affairs():
+    """Recharge les affaires depuis la base de données"""
+    global AFFAIRES
+    try:
+        AFFAIRES = load_affaires_from_db()
+        return jsonify({
+            "success": True, 
+            "message": f"{len(AFFAIRES)} affaires rechargées",
+            "affairs": AFFAIRES
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False, 
+            "message": f"Erreur lors du rechargement: {str(e)}"
+        }), 500
+
+@app.route('/api/affairs')
+def get_affairs():
+    """Retourne la liste des affaires"""
+    return jsonify({"affairs": AFFAIRES})
 
 if __name__ == '__main__':
     #app.run(debug=True)
