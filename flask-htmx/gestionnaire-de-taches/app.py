@@ -6,6 +6,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import sys
 import os
+import pytz
 
 try:
     from config import DATABASE_CONFIG
@@ -183,6 +184,10 @@ def load_tasks_from_db():
         
         print("✅ Connexion à la base de données établie pour les tâches")
         
+        # Définir les fuseaux horaires
+        utc_tz = pytz.UTC
+        paris_tz = pytz.timezone('Europe/Paris')
+        
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             print("📊 Exécution de la requête SQL pour les tâches...")
             cursor.execute("""
@@ -199,12 +204,40 @@ def load_tasks_from_db():
             for i, row in enumerate(rows):
                 print(f"  Tâche {i+1}: ID={row['id']}, Name='{row['name']}', Operator={row['operator_id']}, Affaire={row['affaire_id']}")
                 
+                # Convertir l'heure UTC en heure de Paris
+                start_date_utc = row['start_date']
+                if start_date_utc.tzinfo is None:
+                    # Si pas de timezone, on assume que c'est UTC
+                    start_date_utc = utc_tz.localize(start_date_utc)
+                elif start_date_utc.tzinfo != utc_tz:
+                    # Convertir vers UTC si ce n'est pas déjà le cas
+                    start_date_utc = start_date_utc.astimezone(utc_tz)
+                
+                # Convertir vers l'heure de Paris
+                start_date_paris = start_date_utc.astimezone(paris_tz)
+                
+                # Déterminer le slot selon la logique : avant 12H = AM, après 12H = PM
+                paris_hour = start_date_paris.hour
+                if paris_hour < 12:
+                    # Slot AM (8H)
+                    adjusted_start_date = start_date_paris.replace(hour=8, minute=0, second=0, microsecond=0)
+                else:
+                    # Slot PM (15H)
+                    adjusted_start_date = start_date_paris.replace(hour=15, minute=0, second=0, microsecond=0)
+                
+                # Convertir en datetime naïf (sans timezone) pour compatibilité avec le reste du code
+                adjusted_start_date = adjusted_start_date.replace(tzinfo=None)
+                
+                print(f"    UTC: {start_date_utc.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                print(f"    Paris: {start_date_paris.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+                print(f"    Slot: {'AM' if paris_hour < 12 else 'PM'} -> {adjusted_start_date.strftime('%Y-%m-%d %H:%M:%S')}")
+                
                 # Convertir les données de la base vers le format attendu par l'application
                 task = {
                     "id": str(row['id']),  # Convertir en string pour compatibilité
                     "operator_id": row['operator_id'],
                     "affaire_id": row['affaire_id'],
-                    "start_date": row['start_date'],  # PostgreSQL retourne déjà un datetime
+                    "start_date": adjusted_start_date,  # Utiliser la date ajustée
                     "duration_hours": float(row['duration_hours']),  # S'assurer que c'est un float
                     "name": row['name']
                 }
@@ -292,7 +325,8 @@ def date_to_slot(task_date):
     days_diff = (task_date_only - START_DATE).days
     
     hour = task_datetime.hour
-    is_pm = hour >= 15
+    # Logique modifiée : avant 12H = AM (slot 0), après 12H = PM (slot 1)
+    is_pm = hour >= 12
     
     result_slot = days_diff * 2 + (1 if is_pm else 0)
     return result_slot
@@ -312,6 +346,7 @@ def slot_to_date(slot):
     
     result_date = START_DATE + timedelta(days=days_offset)
     
+    # Ajuster selon la nouvelle logique : AM = 8H, PM = 15H (mais basé sur 12H)
     if is_pm:
         result_datetime = datetime.combine(result_date, datetime.min.time().replace(hour=15))
     else:
