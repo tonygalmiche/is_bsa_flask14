@@ -97,11 +97,11 @@ def load_operators_from_db():
         
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute("""
-                SELECT id, name 
-                FROM hr_employee 
-                ORDER BY name
+                select emp.id, emp.name, count(*)  
+                from hr_employee emp join is_gestion_tache ta on ta.operator_id=emp.id 
+                group by emp.id, emp.name
+                order by emp.name
             """)
-            
             rows = cursor.fetchall()
             operators = []
             
@@ -720,7 +720,7 @@ def index():
     for task in display_tasks:
         operators_with_tasks.add(task['operator_id'])
     
-    # Garder seulement les opérateurs qui ont des tâches
+    # Garder seulement les opérateurs qui ont des tâches, dans l'ordre de la requête SQL (alphabétique)
     filtered_operators = [op for op in OPERATORS if op['id'] in operators_with_tasks]
     
     # Pré-calculer les informations d'absence pour chaque opérateur filtré et slot
@@ -825,41 +825,28 @@ def keyboard_move_task():
             return jsonify(result)
         
         elif direction in ['up', 'down']:
-            # Déplacement vertical avec gestion des opérateurs filtrés
+            # Déplacement vertical avec gestion des opérateurs dans l'ordre de la base de données
             task = next((t for t in TASKS if t["id"] == task_id), None)
             if not task:
                 return jsonify({"success": False, "error": "Tâche non trouvée"})
             
             current_operator_id = task["operator_id"]
-            print(f"🔄 DÉPLACEMENT VERTICAL - Tâche {task_id}, Direction: {direction}")
-            print(f"   Opérateur actuel: {current_operator_id}")
             
-            # Filtrer les opérateurs qui ont au moins une tâche (même logique que dans index())
-            operators_with_tasks = set()
-            for t in TASKS:
-                operators_with_tasks.add(t['operator_id'])
+            # Utiliser les opérateurs dans l'ordre de la requête SQL (ordre alphabétique par nom)
+            # Ce sont les mêmes opérateurs affichés dans l'interface
+            operator_ids_in_order = [op['id'] for op in OPERATORS]  # Garde l'ordre de la requête SQL
             
-            # Obtenir la liste triée des IDs d'opérateurs qui ont des tâches
-            visible_operator_ids = sorted([op['id'] for op in OPERATORS if op['id'] in operators_with_tasks])
-            print(f"   Opérateurs visibles: {visible_operator_ids}")
-            
-            # Trouver la position actuelle dans la liste filtrée
+            # Trouver la position actuelle dans la liste
             try:
-                current_index = visible_operator_ids.index(current_operator_id)
-                print(f"   Index actuel: {current_index}")
+                current_index = operator_ids_in_order.index(current_operator_id)
             except ValueError:
-                print(f"   ❌ Opérateur {current_operator_id} introuvable dans la liste visible")
                 return jsonify({"success": False, "error": "Opérateur actuel introuvable"})
             
             new_operator_id = current_operator_id
             if direction == 'up' and current_index > 0:
-                new_operator_id = visible_operator_ids[current_index - 1]
-                print(f"   ⬆️ Déplacement vers l'opérateur {new_operator_id}")
-            elif direction == 'down' and current_index < len(visible_operator_ids) - 1:
-                new_operator_id = visible_operator_ids[current_index + 1]
-                print(f"   ⬇️ Déplacement vers l'opérateur {new_operator_id}")
-            else:
-                print(f"   🚫 Déplacement impossible (déjà au bord)")
+                new_operator_id = operator_ids_in_order[current_index - 1]
+            elif direction == 'down' and current_index < len(operator_ids_in_order) - 1:
+                new_operator_id = operator_ids_in_order[current_index + 1]
             
             if new_operator_id != current_operator_id:
                 # Sauvegarder l'ancienne position au cas où le déplacement échoue
@@ -867,27 +854,19 @@ def keyboard_move_task():
                 start_slot = get_task_start_slot(task)
                 duration_slots = get_task_duration_slots(task)
                 
-                print(f"   📍 Position: slot {start_slot}, durée {duration_slots}")
-                
                 # Vérifier d'abord si le déplacement est possible en utilisant la même logique robuste que pour les autres déplacements
                 push_success = push_all_colliding_tasks_right(new_operator_id, start_slot, duration_slots, task_id)
-                print(f"   💪 Push réussi: {push_success}")
                 
                 if push_success:
                     # Le déplacement est possible, effectuer le changement d'opérateur
                     task["operator_id"] = new_operator_id
-                    print(f"   ✅ Déplacement réussi vers l'opérateur {new_operator_id}")
                     
                     # TODO: Mise à jour PostgreSQL
                     # update_task_in_database(task_id, new_operator_id, task["start_date"], task["duration_hours"])
                 else:
                     # Le déplacement n'est pas possible, garder l'opérateur actuel
-                    print(f"   ❌ Déplacement refusé (pas assez d'espace)")
                     return jsonify({"success": False, "error": "Impossible de déplacer la tâche vers cet opérateur : pas assez d'espace"})
-            else:
-                print(f"   ↔️ Pas de changement d'opérateur nécessaire")
             
-            print(f"   🎯 Opérateur final: {task['operator_id']}")
             return jsonify({"success": True, "new_operator_id": task["operator_id"]})
         
         return jsonify({"success": False, "error": "Direction invalide"})
@@ -1025,7 +1004,7 @@ def get_planning_data():
     for task in display_tasks:
         operators_with_tasks.add(task['operator_id'])
     
-    # Garder seulement les opérateurs qui ont des tâches
+    # Garder seulement les opérateurs qui ont des tâches, dans l'ordre de la requête SQL
     filtered_operators = [op for op in OPERATORS if op['id'] in operators_with_tasks]
     
     return jsonify({
