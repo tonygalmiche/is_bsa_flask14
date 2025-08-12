@@ -202,20 +202,13 @@ function startResize(e, direction) {
     const slotWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--slot-width'));
     const currentStartSlot = parseInt(task.dataset.startSlot);
     const currentDuration = parseInt(task.dataset.duration);
-    
-    console.log('🔧 START_RESIZE DEBUG:');
-    console.log('  currentStartSlot:', currentStartSlot);
-    console.log('  currentDuration:', currentDuration);
-    console.log('  task.style.left:', task.style.left);
-    console.log('  task.style.width:', task.style.width);
-    
+     
     resizeMode = direction;
     resizeStartX = e.clientX;
     
     // Calculer la largeur originale basée sur les données de la tâche
     resizeOriginalWidth = currentDuration * slotWidth;
     
-    console.log('  resizeOriginalWidth calculé:', resizeOriginalWidth);
     
     // S'assurer que les styles CSS sont cohérents avant de commencer le redimensionnement
     task.style.left = `calc(${currentStartSlot} * var(--slot-width))`;
@@ -376,11 +369,9 @@ function keyboardMoveTask(taskId, direction) {
             // Afficher le message d'erreur spécifique du serveur
             const errorMessage = data.error || 'Erreur lors du déplacement de la tâche';
             showNotification(errorMessage, 'error');
-            console.log('Erreur serveur:', data);
         }
     })
     .catch(error => {
-        console.error('Erreur complète:', error);
         showNotification('Erreur de communication avec le serveur', 'error');
     });
 }
@@ -415,7 +406,6 @@ function moveTask(taskId, newOperatorId, newStartSlot) {
 function updateTaskPositionDirectly(taskId, newOperatorId, newStartSlot) {
     const taskElement = document.querySelector(`[data-task-id="${taskId}"]`);
     if (!taskElement) {
-        console.error(`Tâche non trouvée avec ID: ${taskId}`);
         return;
     }
     
@@ -439,11 +429,7 @@ function updateTaskPositionDirectly(taskId, newOperatorId, newStartSlot) {
         
         if (targetContainer) {
             targetContainer.appendChild(taskElement);
-        } else {
-            console.error(`❌ Container non trouvé pour l'opérateur ${newOperatorId}`);
-        }
-    } else if (!targetOperatorRow) {
-        console.error(`❌ Ligne d'opérateur non trouvée pour l'ID ${newOperatorId}`);
+        } 
     }
     
     // Maintenir le focus et la sélection
@@ -922,7 +908,6 @@ async function reloadAllData() {
         }
         
     } catch (error) {
-        console.error('Erreur lors du rechargement des données:', error);
         status.textContent = 'Erreur de connexion';
         status.className = 'status-text status-error';
     }
@@ -987,7 +972,6 @@ async function reloadData(endpoint, btnId, dataType) {
         }
         
     } catch (error) {
-        console.error(`Erreur lors du rechargement des ${dataType}:`, error);
         status.textContent = 'Erreur de connexion';
         status.className = 'status-text status-error';
     }
