@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sélection du Planning - Planning BSA</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .planning-selection-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .selection-card {
+            background: white;
+            border-radius: 20px;
+            padding: 3rem;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 900px;
+            width: 90%;
+        }
+
+        .selection-title {
+            font-size: 2.5rem;
+            color: #333;
+            margin-bottom: 0.5rem;
+            font-weight: 300;
+        }
+
+        .selection-subtitle {
+            font-size: 1.2rem;
+            color: #666;
+            margin-bottom: 1rem;
+        }
+
+        .database-info {
+            background: #e3f2fd;
+            color: #1565c0;
+            padding: 0.75rem 1rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            font-weight: 500;
+        }
+
+        .plannings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .planning-option {
+            background: #f8f9fa;
+            border: 3px solid #e9ecef;
+            border-radius: 15px;
+            padding: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 120px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .planning-option:hover {
+            transform: translateY(-3px);
+            border-color: #28a745;
+            box-shadow: 0 8px 20px rgba(40,167,69,0.15);
+            background: #fff;
+        }
+
+        .planning-option:active {
+            transform: translateY(-1px);
+        }
+
+        .planning-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            color: #28a745;
+        }
+
+        .planning-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+
+        .planning-stats {
+            font-size: 0.9rem;
+            color: #666;
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 1rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            border: 1px solid #f5c6cb;
+        }
+
+        .no-plannings {
+            background: #fff3cd;
+            color: #856404;
+            padding: 2rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            border: 1px solid #ffeaa7;
+        }
+
+        .footer-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .back-button {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: background 0.3s ease;
+        }
+
+        .back-button:hover {
+            background: #5a6268;
+        }
+
+        .footer-info {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .selection-card {
+                padding: 2rem;
+                margin: 1rem;
+            }
+            
+            .selection-title {
+                font-size: 2rem;
+            }
+            
+            .plannings-grid {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+            
+            .planning-option {
+                min-height: 100px;
+                padding: 1rem;
+            }
+            
+            .planning-icon {
+                font-size: 2.5rem;
+            }
+            
+            .footer-actions {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="planning-selection-container">
+        <div class="selection-card">
+            <h1 class="selection-title">Planning BSA</h1>
+            <p class="selection-subtitle">Sélectionnez un planning</p>
+            
+            <div class="database-info">
+                📊 Base de données : {{ current_database }}
+            </div>
+            
+            {% if error %}
+            <div class="error-message">
+                <strong>Erreur :</strong> {{ error }}
+            </div>
+            {% endif %}
+            
+            {% if plannings %}
+            <div class="plannings-grid">
+                {% for planning in plannings %}
+                <a href="{{ url_for('select_planning', planning_id=planning.id) }}" class="planning-option">
+                    <div class="planning-icon">📋</div>
+                    <div class="planning-name">{{ planning.name }}</div>
+                    <div class="planning-stats">
+                        <span>{{ planning.tache_count }} tâches</span>
+                        <span>{{ planning.affaire_count }} affaires</span>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="no-plannings">
+                <strong>Aucun planning trouvé</strong><br>
+                Il n'y a pas de planning dans cette base de données. Veuillez créer un planning depuis l'interface Odoo.
+            </div>
+            {% endif %}
+            
+            <div class="footer-actions">
+                <a href="{{ url_for('database_selection') }}" class="back-button">
+                    ← Changer de base de données
+                </a>
+                <div class="footer-info">
+                    Cliquez sur un planning pour accéder au planning des opérateurs
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

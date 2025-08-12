@@ -21,6 +21,9 @@
         <div class="header-actions">
             <h1>Planning des Opérateurs</h1>
             <div class="action-buttons">
+                <button id="change-planning-btn" class="btn btn-secondary" onclick="window.location.href='{{ url_for('change_planning') }}'">
+                    📋 Changer de planning
+                </button>
                 <button id="change-database-btn" class="btn btn-secondary" onclick="window.location.href='{{ url_for('change_database') }}'">
                     🔄 Changer de base
                 </button>

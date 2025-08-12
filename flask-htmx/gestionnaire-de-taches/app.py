@@ -17,6 +17,8 @@ app = Flask(__name__)
 
 # Configuration de base de données actuelle
 CURRENT_DATABASE_CONFIG = DATABASE_CONFIG.copy()
+CURRENT_DATABASE_NAME = ""
+CURRENT_PLANNING_ID = None
 
 # Sérialiseur personnalisé pour les dates
 class DateTimeEncoder(json.JSONEncoder):
@@ -46,8 +48,8 @@ def get_db_connection():
     except psycopg2.Error as e:
         return None
 
-def load_affaires_from_db():
-    """Charge les affaires depuis la base PostgreSQL"""
+def load_plannings_from_db():
+    """Charge les plannings depuis la base PostgreSQL avec le nombre de tâches et d'affaires"""
     try:
         conn = get_db_connection()
         if not conn:
@@ -55,10 +57,54 @@ def load_affaires_from_db():
         
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute("""
-                SELECT id, name, color 
-                FROM is_gestion_tache_affaire 
-                ORDER BY name
+                SELECT p.id, p.name,
+                       COUNT(DISTINCT t.id) as tache_count,
+                       COUNT(DISTINCT a.id) as affaire_count
+                FROM is_gestion_tache_planning p
+                LEFT JOIN is_gestion_tache t ON t.planning_id = p.id
+                LEFT JOIN is_gestion_tache_affaire a ON a.planning_id = p.id
+                GROUP BY p.id, p.name
+                ORDER BY p.name
             """)
+            
+            rows = cursor.fetchall()
+            plannings = []
+            
+            for row in rows:
+                plannings.append({
+                    "id": row['id'],
+                    "name": row['name'],
+                    "tache_count": row['tache_count'] or 0,
+                    "affaire_count": row['affaire_count'] or 0
+                })
+            
+            conn.close()
+            return plannings
+            
+    except Exception as e:
+        raise Exception(f"Erreur lors du chargement des plannings depuis la base de données: {str(e)}")
+
+def load_affaires_from_db(planning_id=None):
+    """Charge les affaires depuis la base PostgreSQL"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            raise Exception("Impossible de se connecter à la base de données PostgreSQL")
+        
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            if planning_id:
+                cursor.execute("""
+                    SELECT id, name, color 
+                    FROM is_gestion_tache_affaire 
+                    WHERE planning_id = %s
+                    ORDER BY name
+                """, (planning_id,))
+            else:
+                cursor.execute("""
+                    SELECT id, name, color 
+                    FROM is_gestion_tache_affaire 
+                    ORDER BY name
+                """)
             
             rows = cursor.fetchall()
             affaires = []
@@ -106,7 +152,7 @@ def load_operators_from_db():
     except Exception as e:
         raise Exception(f"Erreur lors du chargement des opérateurs depuis la base de données: {str(e)}")
 
-def load_tasks_from_db():
+def load_tasks_from_db(planning_id=None):
     """Charge les tâches depuis la base PostgreSQL"""
     try:
         conn = get_db_connection()
@@ -118,11 +164,19 @@ def load_tasks_from_db():
         paris_tz = pytz.timezone('Europe/Paris')
         
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            cursor.execute("""
-                SELECT id, name, operator_id, affaire as affaire_id, start_date, duration_hours
-                FROM is_gestion_tache 
-                ORDER BY start_date, operator_id
-            """)
+            if planning_id:
+                cursor.execute("""
+                    SELECT id, name, operator_id, affaire as affaire_id, start_date, duration_hours
+                    FROM is_gestion_tache 
+                    WHERE planning_id = %s
+                    ORDER BY start_date, operator_id
+                """, (planning_id,))
+            else:
+                cursor.execute("""
+                    SELECT id, name, operator_id, affaire as affaire_id, start_date, duration_hours
+                    FROM is_gestion_tache 
+                    ORDER BY start_date, operator_id
+                """)
             
             rows = cursor.fetchall()
             tasks = []
@@ -660,8 +714,8 @@ def database_selection():
 
 @app.route('/select_database/<database_id>')
 def select_database(database_id):
-    """Sélectionne une base de données et redirige vers le planning"""
-    global CURRENT_DATABASE_CONFIG, OPERATORS, AFFAIRES, TASKS
+    """Sélectionne une base de données et redirige vers la sélection de planning"""
+    global CURRENT_DATABASE_CONFIG, CURRENT_DATABASE_NAME
     
     # Trouver la configuration de la base de données
     selected_db = next((db for db in DATABASES if db['id'] == database_id), None)
@@ -675,20 +729,59 @@ def select_database(database_id):
         **DATABASE_BASE_CONFIG,
         'database': selected_db['database']
     }
+    CURRENT_DATABASE_NAME = selected_db['name']
     
     try:
-        # Recharger les données avec la nouvelle base
-        OPERATORS = load_operators_from_db()
-        AFFAIRES = load_affaires_from_db()
-        TASKS = load_tasks_from_db()
+        # Tester la connexion à la base
+        conn = get_db_connection()
+        if not conn:
+            raise Exception("Impossible de se connecter à la base de données")
+        conn.close()
         
-        # Rediriger vers le planning
-        return redirect(url_for('planning'))
+        # Rediriger vers la sélection de planning
+        return redirect(url_for('planning_selection'))
         
     except Exception as e:
         return render_template('database_selection.html', 
                              databases=DATABASES, 
                              error=f"Erreur lors de la connexion à {selected_db['name']}: {str(e)}")
+
+@app.route('/planning_selection')
+def planning_selection():
+    """Page de sélection du planning"""
+    try:
+        plannings = load_plannings_from_db()
+        return render_template('planning_selection.html', 
+                             plannings=plannings,
+                             current_database=CURRENT_DATABASE_NAME)
+    except Exception as e:
+        return render_template('planning_selection.html', 
+                             plannings=[], 
+                             current_database=CURRENT_DATABASE_NAME,
+                             error=str(e))
+
+@app.route('/select_planning/<int:planning_id>')
+def select_planning(planning_id):
+    """Sélectionne un planning et redirige vers le planning des opérateurs"""
+    global CURRENT_PLANNING_ID, OPERATORS, AFFAIRES, TASKS
+    
+    try:
+        # Sauvegarder l'ID du planning
+        CURRENT_PLANNING_ID = planning_id
+        
+        # Charger les données filtrées par planning
+        AFFAIRES = load_affaires_from_db(planning_id)
+        TASKS = load_tasks_from_db(planning_id)
+        OPERATORS = load_operators_from_db()
+        
+        # Rediriger vers le planning
+        return redirect(url_for('planning'))
+        
+    except Exception as e:
+        return render_template('planning_selection.html', 
+                             plannings=load_plannings_from_db(),
+                             current_database=CURRENT_DATABASE_NAME,
+                             error=f"Erreur lors du chargement du planning: {str(e)}")
 
 @app.route('/planning')
 def planning():
@@ -804,6 +897,11 @@ def planning():
 def change_database():
     """Retourne à la sélection de base de données"""
     return redirect(url_for('database_selection'))
+
+@app.route('/change_planning')
+def change_planning():
+    """Retourne à la sélection de planning"""
+    return redirect(url_for('planning_selection'))
 
 @app.route('/move_task', methods=['POST'])
 def move_task():
@@ -1140,12 +1238,12 @@ def reload_data():
         new_operators = load_operators_from_db()
         operators_count = len(new_operators)
         
-        # Recharger les affaires
-        new_affaires = load_affaires_from_db()
+        # Recharger les affaires (filtrées par planning si applicable)
+        new_affaires = load_affaires_from_db(CURRENT_PLANNING_ID)
         affaires_count = len(new_affaires)
         
-        # Recharger les tâches
-        new_tasks = load_tasks_from_db()
+        # Recharger les tâches (filtrées par planning si applicable)
+        new_tasks = load_tasks_from_db(CURRENT_PLANNING_ID)
         tasks_count = len(new_tasks)
         
         # Mettre à jour les variables globales seulement si tout s'est bien passé
@@ -1173,7 +1271,7 @@ def reload_affairs():
     """Recharge les affaires depuis la base de données"""
     global AFFAIRES
     try:
-        AFFAIRES = load_affaires_from_db()
+        AFFAIRES = load_affaires_from_db(CURRENT_PLANNING_ID)
         return jsonify({
             "success": True, 
             "message": f"{len(AFFAIRES)} affaires rechargées",
@@ -1207,7 +1305,7 @@ def reload_tasks():
     """Recharge les tâches depuis la base de données"""
     global TASKS
     try:
-        TASKS = load_tasks_from_db()
+        TASKS = load_tasks_from_db(CURRENT_PLANNING_ID)
         return jsonify({
             "success": True, 
             "message": f"{len(TASKS)} tâches rechargées",
