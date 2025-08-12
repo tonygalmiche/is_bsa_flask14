@@ -48,7 +48,7 @@ def load_affaires_from_db():
     try:
         conn = get_db_connection()
         if not conn:
-            return get_default_affaires()
+            raise Exception("Impossible de se connecter à la base de données PostgreSQL")
         
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute("""
@@ -71,27 +71,14 @@ def load_affaires_from_db():
             return affaires
             
     except Exception as e:
-        return get_default_affaires()
-
-def get_default_affaires():
-    """Retourne les affaires par défaut en cas de problème de base de données"""
-    return [
-        {"id": 1, "name": "Projet Alpha", "color": "#FF6B6B"},
-        {"id": 2, "name": "Projet Beta", "color": "#4ECDC4"},
-        {"id": 3, "name": "Projet Gamma", "color": "#45B7D1"},
-        {"id": 4, "name": "Projet Delta", "color": "#96CEB4"},
-        {"id": 5, "name": "Projet Epsilon", "color": "#FFEAA7"},
-        {"id": 6, "name": "Projet Zeta", "color": "#DDA0DD"},
-        {"id": 7, "name": "Projet Eta", "color": "#FFB347"},
-        {"id": 8, "name": "Projet Theta", "color": "#98D8C8"}
-    ]
+        raise Exception(f"Erreur lors du chargement des affaires depuis la base de données: {str(e)}")
 
 def load_operators_from_db():
     """Charge les opérateurs depuis la base PostgreSQL"""
     try:
         conn = get_db_connection()
         if not conn:
-            return get_default_operators()
+            raise Exception("Impossible de se connecter à la base de données PostgreSQL")
         
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute("""
@@ -114,42 +101,14 @@ def load_operators_from_db():
             return operators
             
     except Exception as e:
-        return get_default_operators()
-
-def get_default_operators():
-    """Retourne les opérateurs par défaut en cas de problème de base de données"""
-    return [
-        {
-            "id": 1, 
-            "name": "Jean Dupont",
-            "absences": [
-                datetime(2025, 8, 12, 8, 0),   # 12 août AM
-                datetime(2025, 8, 20, 14, 0),  # 20 août PM
-            ]
-        },
-        {
-            "id": 2, 
-            "name": "Marie Martin",
-            "absences": [
-                datetime(2025, 8, 18, 8, 0),   # 18 août AM
-            ]
-        },
-        {"id": 3, "name": "Pierre Durand", "absences": []},
-        {"id": 4, "name": "Sophie Lambert", "absences": []},
-        {"id": 5, "name": "Antoine Moreau", "absences": []},
-        {"id": 6, "name": "Claire Rousseau", "absences": []},
-        {"id": 7, "name": "Lucas Bernard", "absences": []},
-        {"id": 8, "name": "Emma Lefevre", "absences": []},
-        {"id": 9, "name": "Thomas Dubois", "absences": []},
-        {"id": 10, "name": "Julie Garnier", "absences": []}
-    ]
+        raise Exception(f"Erreur lors du chargement des opérateurs depuis la base de données: {str(e)}")
 
 def load_tasks_from_db():
     """Charge les tâches depuis la base PostgreSQL"""
     try:
         conn = get_db_connection()
         if not conn:
-            return get_default_tasks()
+            raise Exception("Impossible de se connecter à la base de données PostgreSQL")
         
         # Définir les fuseaux horaires
         utc_tz = pytz.UTC
@@ -206,36 +165,7 @@ def load_tasks_from_db():
             return tasks
             
     except Exception as e:
-        return get_default_tasks()
-
-def get_default_tasks():
-    """Retourne les tâches par défaut en cas de problème de base de données"""
-    return [
-        {
-            "id": str(uuid.uuid4()),
-            "operator_id": 1,
-            "affaire_id": 1,
-            "start_date": datetime.combine(START_DATE, datetime.min.time().replace(hour=8)),  # Slot 0 (Jour 1 AM)
-            "duration_hours": 21,  # 6 slots (3.5h * 6 = 21h)
-            "name": "Analyse Alpha"
-        },
-        {
-            "id": str(uuid.uuid4()),
-            "operator_id": 1,
-            "affaire_id": 2,
-            "start_date": datetime.combine(START_DATE + timedelta(days=4), datetime.min.time().replace(hour=8)),  # Slot 8 (Jour 5 AM)
-            "duration_hours": 14,  # 4 slots (3.5h * 4 = 14h)
-            "name": "Dev Beta"
-        },
-        {
-            "id": str(uuid.uuid4()),
-            "operator_id": 2,
-            "affaire_id": 3,
-            "start_date": datetime.combine(START_DATE + timedelta(days=1), datetime.min.time().replace(hour=8)),  # Slot 2 (Jour 2 AM)
-            "duration_hours": 17.5,  # 5 slots (3.5h * 5 = 17.5h)
-            "name": "Tests Gamma"
-        }
-    ]
+        raise Exception(f"Erreur lors du chargement des tâches depuis la base de données: {str(e)}")
 
 def update_task_in_database(task_id, operator_id, start_date, duration_hours):
     """Met à jour une tâche dans la base de données PostgreSQL"""
@@ -334,13 +264,25 @@ VACATION_DATES = [
 ]
 
 # Chargement dynamique des opérateurs depuis la base de données
-OPERATORS = load_operators_from_db()
+try:
+    OPERATORS = load_operators_from_db()
+except Exception as e:
+    print(f"ERREUR CRITIQUE : {e}")
+    sys.exit(1)
 
 # Chargement dynamique des affaires depuis la base de données
-AFFAIRES = load_affaires_from_db()
+try:
+    AFFAIRES = load_affaires_from_db()
+except Exception as e:
+    print(f"ERREUR CRITIQUE : {e}")
+    sys.exit(1)
 
 # Chargement dynamique des tâches depuis la base de données
-TASKS = load_tasks_from_db()
+try:
+    TASKS = load_tasks_from_db()
+except Exception as e:
+    print(f"ERREUR CRITIQUE : {e}")
+    sys.exit(1)
 
 def date_to_slot(task_date):
     """Convertit une date/datetime en numéro de slot"""
