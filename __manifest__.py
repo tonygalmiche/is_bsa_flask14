@@ -14,7 +14,8 @@ InfoSaône - Gestion des tâches pour BSA avec Odoo 14 et interface en Flask / H
         "is_bsa14",       
     ],
     "data" : [
-        "security/ir.model.access.csv",        
+        "security/ir.model.access.csv",    
+        "views/is_gestion_tache_view.xml",
     ],
     "installable": True,
     "active": False,

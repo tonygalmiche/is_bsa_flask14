@@ -3,48 +3,131 @@
 <odoo>
     <data>
 
-
-
-        
-        <!-- bsa.fnc.categorie --> 
-        <!-- <record model="ir.ui.view" id="bsa_fnc_categorie_form_view">
-            <field name="name">bsa_fnc_categorie_form_view</field>
-            <field name="model">bsa.fnc.categorie</field>
+        <!-- is.gestion.tache.affaire -->
+        <record model="ir.ui.view" id="is_gestion_tache_affaire_form_view">
+            <field name="name">is_gestion_tache_affaire_form_view</field>
+            <field name="model">is.gestion.tache.affaire</field>
             <field name="type">form</field>
             <field name="arch" type="xml">
                 <form>  
                     <sheet>
                         <group>
                             <field name="name"/> 
+                            <field name="color" widget="color"/>
                         </group>
                     </sheet>
                 </form>
             </field>
         </record>
-        <record model="ir.ui.view" id="bsa_fnc_categorie_tree_view">
-            <field name="name">bsa_fnc_categorie_tree_view</field>
-            <field name="model">bsa.fnc.categorie</field>
+
+        <record model="ir.ui.view" id="is_gestion_tache_affaire_tree_view">
+            <field name="name">is_gestion_tache_affaire_tree_view</field>
+            <field name="model">is.gestion.tache.affaire</field>
             <field name="type">tree</field>
             <field name="arch" type="xml">
                 <tree>
                     <field name="name"/>
+                    <field name="color" widget="color"/>
                 </tree>
             </field>
         </record>
-        <record model="ir.ui.view" id="bsa_fnc_categorie_search_view" >
-            <field name="name">bsa_fnc_categorie_search_view</field>
-            <field name="model">bsa.fnc.categorie</field>
+
+        <record model="ir.ui.view" id="is_gestion_tache_affaire_search_view">
+            <field name="name">is_gestion_tache_affaire_search_view</field>
+            <field name="model">is.gestion.tache.affaire</field>
             <field name="arch" type="xml">
                 <search>
                     <field name="name"/>
                 </search>
             </field>
         </record>
-        <record model="ir.actions.act_window" id="bsa_fnc_categorie_action">
-            <field name="name">Catégorie FNC</field>
-            <field name="res_model">bsa.fnc.categorie</field>
+
+        <record model="ir.actions.act_window" id="is_gestion_tache_affaire_action">
+            <field name="name">Affaires</field>
+            <field name="res_model">is.gestion.tache.affaire</field>
             <field name="view_mode">tree,form</field>
-        </record> -->
+        </record>
+
+        <!-- is.gestion.tache -->
+        <record model="ir.ui.view" id="is_gestion_tache_form_view">
+            <field name="name">is_gestion_tache_form_view</field>
+            <field name="model">is.gestion.tache</field>
+            <field name="type">form</field>
+            <field name="arch" type="xml">
+                <form>  
+                    <sheet>
+                        <group>
+                            <group>
+                                <field name="name"/> 
+                                <field name="operator_id"/>
+                                <field name="affaire"/>
+                            </group>
+                            <group>
+                                <field name="start_date"/>
+                                <field name="duration_hours"/>
+                            </group>
+                        </group>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <record model="ir.ui.view" id="is_gestion_tache_tree_view">
+            <field name="name">is_gestion_tache_tree_view</field>
+            <field name="model">is.gestion.tache</field>
+            <field name="type">tree</field>
+            <field name="arch" type="xml">
+                <tree>
+                    <field name="name"/>
+                    <field name="operator_id"/>
+                    <field name="affaire"/>
+                    <field name="start_date"/>
+                    <field name="duration_hours"/>
+                </tree>
+            </field>
+        </record>
+
+        <record model="ir.ui.view" id="is_gestion_tache_search_view">
+            <field name="name">is_gestion_tache_search_view</field>
+            <field name="model">is.gestion.tache</field>
+            <field name="arch" type="xml">
+                <search>
+                    <field name="name"/>
+                    <field name="operator_id"/>
+                    <field name="affaire"/>
+                    <field name="start_date"/>
+                    <separator/>
+                    <group expand="0" string="Grouper par">
+                        <filter string="Opérateur" name="group_operator" context="{'group_by': 'operator_id'}"/>
+                        <filter string="Affaire" name="group_affaire" context="{'group_by': 'affaire'}"/>
+                        <filter string="Date de début" name="group_start_date" context="{'group_by': 'start_date:month'}"/>
+                    </group>
+                </search>
+            </field>
+        </record>
+
+        <record model="ir.actions.act_window" id="is_gestion_tache_action">
+            <field name="name">Gestion des Tâches</field>
+            <field name="res_model">is.gestion.tache</field>
+            <field name="view_mode">tree,form</field>
+        </record>
+
+        <!-- Menus -->
+        <menuitem id="is_gestion_tache_menu_root" 
+                  name="Gestion des Tâches" 
+                  sequence="86"/>
+
+        <menuitem id="is_gestion_tache_menu" 
+                  name="Tâches" 
+                  parent="is_gestion_tache_menu_root" 
+                  action="is_gestion_tache_action" 
+                  sequence="10"/>
+
+        <menuitem id="is_gestion_tache_affaire_menu" 
+                  name="Affaires" 
+                  parent="is_gestion_tache_menu_root" 
+                  action="is_gestion_tache_affaire_action" 
+                  sequence="20"/>
 
     </data>
 </odoo>
