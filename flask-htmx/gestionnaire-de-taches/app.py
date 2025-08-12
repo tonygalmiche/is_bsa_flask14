@@ -789,16 +789,25 @@ def index():
     
     print(f"📊 Tâches finales pour le template: {len(display_tasks)}")
     
-    # Pré-calculer les informations d'absence pour chaque opérateur et slot
+    # Filtrer les opérateurs qui ont au moins une tâche affichée
+    operators_with_tasks = set()
+    for task in display_tasks:
+        operators_with_tasks.add(task['operator_id'])
+    
+    # Garder seulement les opérateurs qui ont des tâches
+    filtered_operators = [op for op in OPERATORS if op['id'] in operators_with_tasks]
+    print(f"👥 Opérateurs avec tâches: {len(filtered_operators)} sur {len(OPERATORS)}")
+    
+    # Pré-calculer les informations d'absence pour chaque opérateur filtré et slot
     operator_absences = {}
-    for operator in OPERATORS:
+    for operator in filtered_operators:
         operator_absences[operator["id"]] = {}
         for i in range(NUM_SLOTS):
             operator_absences[operator["id"]][i] = is_absence_slot(operator["id"], i)
     
     print("🎨 Rendu du template...")
     return render_template('index.html', 
-                         operators=OPERATORS, 
+                         operators=filtered_operators,  # Utiliser la liste filtrée
                          time_slots=time_slots,
                          months=months,
                          weeks=weeks,
@@ -892,17 +901,39 @@ def keyboard_move_task():
             return jsonify(result)
         
         elif direction in ['up', 'down']:
-            # Déplacement vertical standard
+            # Déplacement vertical avec gestion des opérateurs filtrés
             task = next((t for t in TASKS if t["id"] == task_id), None)
             if not task:
                 return jsonify({"success": False, "error": "Tâche non trouvée"})
             
             current_operator_id = task["operator_id"]
             
-            if direction == 'up':
-                new_operator_id = current_operator_id - 1 if current_operator_id > 1 else current_operator_id
-            else:  # down
-                new_operator_id = current_operator_id + 1 if current_operator_id < len(OPERATORS) else current_operator_id
+            # Filtrer les opérateurs qui ont au moins une tâche (même logique que dans index())
+            operators_with_tasks = set()
+            for t in TASKS:
+                operators_with_tasks.add(t['operator_id'])
+            
+            # Obtenir la liste triée des IDs d'opérateurs qui ont des tâches
+            visible_operator_ids = sorted([op['id'] for op in OPERATORS if op['id'] in operators_with_tasks])
+            
+            print(f"🎯 Déplacement vertical - Opérateur actuel: {current_operator_id}")
+            print(f"📋 Opérateurs visibles: {visible_operator_ids}")
+            
+            # Trouver la position actuelle dans la liste filtrée
+            try:
+                current_index = visible_operator_ids.index(current_operator_id)
+                print(f"📍 Index actuel: {current_index}")
+            except ValueError:
+                print(f"❌ Opérateur {current_operator_id} non trouvé dans la liste visible")
+                return jsonify({"success": False, "error": "Opérateur actuel introuvable"})
+            
+            new_operator_id = current_operator_id
+            if direction == 'up' and current_index > 0:
+                new_operator_id = visible_operator_ids[current_index - 1]
+            elif direction == 'down' and current_index < len(visible_operator_ids) - 1:
+                new_operator_id = visible_operator_ids[current_index + 1]
+            
+            print(f"🎯 Nouvel opérateur: {new_operator_id}")
             
             if new_operator_id != current_operator_id:
                 task["operator_id"] = new_operator_id
@@ -1063,9 +1094,17 @@ def get_planning_data():
         display_task["duration"] = duration_slots
         display_tasks.append(display_task)
     
+    # Filtrer les opérateurs qui ont au moins une tâche (même logique que dans index())
+    operators_with_tasks = set()
+    for task in display_tasks:
+        operators_with_tasks.add(task['operator_id'])
+    
+    # Garder seulement les opérateurs qui ont des tâches
+    filtered_operators = [op for op in OPERATORS if op['id'] in operators_with_tasks]
+    
     return jsonify({
         "tasks": display_tasks,
-        "operators": OPERATORS,
+        "operators": filtered_operators,  # Utiliser la liste filtrée ici aussi
         "affairs": AFFAIRES
     })
 
