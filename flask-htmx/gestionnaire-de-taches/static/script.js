@@ -890,3 +890,75 @@ function getSlotInfo(slotIndex) {
         dayName: currentDate.toLocaleDateString('fr-FR', { weekday: 'short' })
     };
 }
+
+// === GESTION DU RECHARGEMENT DES AFFAIRES ===
+
+function setupAffairsReload() {
+    const reloadBtn = document.getElementById('reload-affairs-btn');
+    if (reloadBtn) {
+        reloadBtn.addEventListener('click', reloadAffairs);
+    }
+}
+
+async function reloadAffairs() {
+    const btn = document.getElementById('reload-affairs-btn');
+    const status = document.getElementById('affairs-status');
+    
+    if (!btn || !status) return;
+    
+    // Désactiver le bouton et changer le texte
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Rechargement...';
+    btn.classList.add('loading');
+    
+    try {
+        const response = await fetch('/api/reload-affairs', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Succès
+            status.textContent = result.message;
+            status.className = 'status-text status-success';
+            
+            // Réactualiser la page après un court délai pour voir les changements
+            setTimeout(() => {
+                location.reload();
+            }, 1000);
+            
+        } else {
+            // Erreur
+            status.textContent = result.message;
+            status.className = 'status-text status-error';
+        }
+        
+    } catch (error) {
+        console.error('Erreur lors du rechargement des affaires:', error);
+        status.textContent = 'Erreur de connexion';
+        status.className = 'status-text status-error';
+    }
+    
+    // Réactiver le bouton
+    setTimeout(() => {
+        btn.disabled = false;
+        btn.innerHTML = '🔄 Recharger les affaires';
+        btn.classList.remove('loading');
+        
+        // Remettre le statut normal après 3 secondes si pas d'erreur
+        if (!status.classList.contains('status-error')) {
+            status.className = 'status-text';
+        }
+    }, 2000);
+}
+
+// Modifier la fonction setupEventListeners pour inclure le rechargement des affaires
+const originalSetupEventListeners = setupEventListeners;
+setupEventListeners = function() {
+    originalSetupEventListeners();
+    setupAffairsReload();
+};

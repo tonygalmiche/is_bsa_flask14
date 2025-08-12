@@ -92,6 +92,13 @@ h1 {
     transform: translateY(0);
 }
 
+.btn:disabled,
+.btn.loading {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
 .status-text {
     font-size: 12px;
     opacity: 0.9;
