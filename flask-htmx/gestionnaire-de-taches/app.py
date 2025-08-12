@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for
 import json
 from datetime import datetime, timedelta
 import uuid
@@ -9,11 +9,14 @@ import os
 import pytz
 
 try:
-    from config import DATABASE_CONFIG
+    from config import DATABASE_CONFIG, DATABASE_BASE_CONFIG, DATABASES
 except ImportError:
     sys.exit(1)
 
 app = Flask(__name__)
+
+# Configuration de base de données actuelle
+CURRENT_DATABASE_CONFIG = DATABASE_CONFIG.copy()
 
 # Sérialiseur personnalisé pour les dates
 class DateTimeEncoder(json.JSONEncoder):
@@ -38,7 +41,7 @@ HALF_DAY_HOURS = DAY_DURATION_HOURS / 2  # Durée d'une demi-journée (AM ou PM)
 def get_db_connection():
     """Établit une connexion à la base PostgreSQL"""
     try:
-        conn = psycopg2.connect(**DATABASE_CONFIG)
+        conn = psycopg2.connect(**CURRENT_DATABASE_CONFIG)
         return conn
     except psycopg2.Error as e:
         return None
@@ -264,25 +267,10 @@ VACATION_DATES = [
 ]
 
 # Chargement dynamique des opérateurs depuis la base de données
-try:
-    OPERATORS = load_operators_from_db()
-except Exception as e:
-    print(f"ERREUR CRITIQUE : {e}")
-    sys.exit(1)
-
-# Chargement dynamique des affaires depuis la base de données
-try:
-    AFFAIRES = load_affaires_from_db()
-except Exception as e:
-    print(f"ERREUR CRITIQUE : {e}")
-    sys.exit(1)
-
-# Chargement dynamique des tâches depuis la base de données
-try:
-    TASKS = load_tasks_from_db()
-except Exception as e:
-    print(f"ERREUR CRITIQUE : {e}")
-    sys.exit(1)
+# Les données seront chargées lors de la sélection de la base de données
+OPERATORS = []
+AFFAIRES = []
+TASKS = []
 
 def date_to_slot(task_date):
     """Convertit une date/datetime en numéro de slot"""
@@ -666,7 +654,45 @@ def resolve_all_collisions_on_operator(operator_id):
             break
 
 @app.route('/')
-def index():
+def database_selection():
+    """Page de sélection de la base de données"""
+    return render_template('database_selection.html', databases=DATABASES)
+
+@app.route('/select_database/<database_id>')
+def select_database(database_id):
+    """Sélectionne une base de données et redirige vers le planning"""
+    global CURRENT_DATABASE_CONFIG, OPERATORS, AFFAIRES, TASKS
+    
+    # Trouver la configuration de la base de données
+    selected_db = next((db for db in DATABASES if db['id'] == database_id), None)
+    if not selected_db:
+        return render_template('database_selection.html', 
+                             databases=DATABASES, 
+                             error="Base de données non trouvée")
+    
+    # Mettre à jour la configuration de base de données
+    CURRENT_DATABASE_CONFIG = {
+        **DATABASE_BASE_CONFIG,
+        'database': selected_db['database']
+    }
+    
+    try:
+        # Recharger les données avec la nouvelle base
+        OPERATORS = load_operators_from_db()
+        AFFAIRES = load_affaires_from_db()
+        TASKS = load_tasks_from_db()
+        
+        # Rediriger vers le planning
+        return redirect(url_for('planning'))
+        
+    except Exception as e:
+        return render_template('database_selection.html', 
+                             databases=DATABASES, 
+                             error=f"Erreur lors de la connexion à {selected_db['name']}: {str(e)}")
+
+@app.route('/planning')
+def planning():
+    """Page principale du planning des opérateurs"""
     # Générer les en-têtes de colonnes (NUM_SLOTS demi-journées)
     time_slots = []
     months = []
@@ -773,6 +799,11 @@ def index():
                          num_slots=NUM_SLOTS,
                          start_date=START_DATE,
                          day_duration_hours=DAY_DURATION_HOURS)
+
+@app.route('/change_database')
+def change_database():
+    """Retourne à la sélection de base de données"""
+    return redirect(url_for('database_selection'))
 
 @app.route('/move_task', methods=['POST'])
 def move_task():

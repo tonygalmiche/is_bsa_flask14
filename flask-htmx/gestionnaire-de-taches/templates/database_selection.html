@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sélection de la Base de Données - Planning BSA</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .database-selection-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .selection-card {
+            background: white;
+            border-radius: 20px;
+            padding: 3rem;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 800px;
+            width: 90%;
+        }
+
+        .selection-title {
+            font-size: 2.5rem;
+            color: #333;
+            margin-bottom: 0.5rem;
+            font-weight: 300;
+        }
+
+        .selection-subtitle {
+            font-size: 1.2rem;
+            color: #666;
+            margin-bottom: 3rem;
+        }
+
+        .databases-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .database-option {
+            background: #f8f9fa;
+            border: 3px solid #e9ecef;
+            border-radius: 15px;
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 140px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .database-option:hover {
+            transform: translateY(-5px);
+            border-color: #007bff;
+            box-shadow: 0 10px 25px rgba(0,123,255,0.15);
+            background: #fff;
+        }
+
+        .database-option:active {
+            transform: translateY(-2px);
+        }
+
+        .database-icon {
+            width: 160px;
+            height: 160px;
+            object-fit: contain;
+            margin-bottom: 1rem;
+            transition: transform 0.3s ease;
+        }
+
+        .database-option:hover .database-icon {
+            transform: scale(1.1);
+        }
+
+        .database-name {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #333;
+            margin-top: auto;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 1rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            border: 1px solid #f5c6cb;
+        }
+
+        .footer-info {
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid #e9ecef;
+        }
+
+        @media (max-width: 768px) {
+            .selection-card {
+                padding: 2rem;
+                margin: 1rem;
+            }
+            
+            .selection-title {
+                font-size: 2rem;
+            }
+            
+            .databases-grid {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+            
+            .database-option {
+                min-height: 110px;
+                padding: 1rem;
+            }
+            
+            .database-icon {
+                width: 120px;
+                height: 120px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="database-selection-container">
+        <div class="selection-card">
+            <h1 class="selection-title">Planning BSA</h1>
+            <p class="selection-subtitle">Sélectionnez votre base de données</p>
+            
+            {% if error %}
+            <div class="error-message">
+                <strong>Erreur :</strong> {{ error }}
+            </div>
+            {% endif %}
+            
+            <div class="databases-grid">
+                {% for database in databases %}
+                <a href="{{ url_for('select_database', database_id=database.id) }}" class="database-option">
+                    <img src="{{ url_for('static', filename='src/img/' + database.icon) }}" 
+                         alt="{{ database.name }}" 
+                         class="database-icon"
+                         onerror="this.style.display='none'">
+                    <div class="database-name">{{ database.name }}</div>
+                </a>
+                {% endfor %}
+            </div>
+            
+            <div class="footer-info">
+                Cliquez sur l'icône correspondante pour accéder au planning de la base de données
+            </div>
+        </div>
+    </div>
+</body>
+</html>

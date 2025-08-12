@@ -5,17 +5,25 @@ import datetime
 
 
 
+
+class is_gestion_tache_planning(models.Model):
+    _name='is.gestion.tache.planning'
+    _description='Planning pour la gestion des tâches'
+    _order='name'
+
+    name        = fields.Char("Plannig", required=True)
+    tache_ids   = fields.One2many('is.gestion.tache', 'planning_id', string="Tâches")
+    affaire_ids = fields.One2many('is.gestion.tache.affaire', 'planning_id', string="Affaires")
+
+
 class is_gestion_tache_affaire(models.Model):
     _name='is.gestion.tache.affaire'
     _description='Affaires pour la gestion des tâches'
     _order='name'
 
-    name  = fields.Char("Affaire", required=True)
-    color = fields.Char(string="Couleur")
-
-
-                                # <field name="ppr_color" widget="color"/>
-
+    name        = fields.Char("Affaire", required=True)
+    color       = fields.Char(string="Couleur")
+    planning_id = fields.Many2one('is.gestion.tache.planning', string="Planning", ondelete='cascade')
 
 
 class is_gestion_tache(models.Model):
@@ -28,4 +36,5 @@ class is_gestion_tache(models.Model):
     affaire        = fields.Many2one('is.gestion.tache.affaire', string="Affaire", required=True)
     start_date     = fields.Datetime(string="Date de début", required=True)
     duration_hours = fields.Float(string="Durée (heures)", required=True)
+    planning_id    = fields.Many2one('is.gestion.tache.planning', string="Planning", ondelete='cascade')
 

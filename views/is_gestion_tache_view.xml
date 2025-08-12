@@ -3,6 +3,72 @@
 <odoo>
     <data>
 
+        <!-- is.gestion.tache.planning -->
+        <record model="ir.ui.view" id="is_gestion_tache_planning_form_view">
+            <field name="name">is_gestion_tache_planning_form_view</field>
+            <field name="model">is.gestion.tache.planning</field>
+            <field name="type">form</field>
+            <field name="arch" type="xml">
+                <form>  
+                    <sheet>
+                        <group>
+                            <field name="name"/> 
+                        </group>
+                        <notebook>
+                            <page string="Tâches">
+                                <field name="tache_ids">
+                                    <tree>
+                                        <field name="name"/>
+                                        <field name="operator_id"/>
+                                        <field name="affaire"/>
+                                        <field name="start_date"/>
+                                        <field name="duration_hours"/>
+                                    </tree>
+                                </field>
+                            </page>
+                            <page string="Affaires">
+                                <field name="affaire_ids">
+                                    <tree>
+                                        <field name="name"/>
+                                        <field name="color" widget="color"/>
+                                    </tree>
+                                </field>
+                            </page>
+                        </notebook>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <record model="ir.ui.view" id="is_gestion_tache_planning_tree_view">
+            <field name="name">is_gestion_tache_planning_tree_view</field>
+            <field name="model">is.gestion.tache.planning</field>
+            <field name="type">tree</field>
+            <field name="arch" type="xml">
+                <tree>
+                    <field name="name"/>
+                </tree>
+            </field>
+        </record>
+
+        <record model="ir.ui.view" id="is_gestion_tache_planning_search_view">
+            <field name="name">is_gestion_tache_planning_search_view</field>
+            <field name="model">is.gestion.tache.planning</field>
+            <field name="arch" type="xml">
+                <search>
+                    <field name="name"/>
+                </search>
+            </field>
+        </record>
+
+        <record model="ir.actions.act_window" id="is_gestion_tache_planning_action">
+            <field name="name">Plannings</field>
+            <field name="res_model">is.gestion.tache.planning</field>
+            <field name="view_mode">tree,form</field>
+        </record>
+
+
+
         <!-- is.gestion.tache.affaire -->
         <record model="ir.ui.view" id="is_gestion_tache_affaire_form_view">
             <field name="name">is_gestion_tache_affaire_form_view</field>
@@ -14,6 +80,7 @@
                         <group>
                             <field name="name"/> 
                             <field name="color" widget="color"/>
+                            <field name="planning_id"/>
                         </group>
                     </sheet>
                 </form>
@@ -28,6 +95,7 @@
                 <tree>
                     <field name="name"/>
                     <field name="color" widget="color"/>
+                    <field name="planning_id"/>
                 </tree>
             </field>
         </record>
@@ -65,6 +133,7 @@
                             <group>
                                 <field name="start_date"/>
                                 <field name="duration_hours"/>
+                                <field name="planning_id"/>
                             </group>
                         </group>
                     </sheet>
@@ -83,6 +152,7 @@
                     <field name="affaire"/>
                     <field name="start_date"/>
                     <field name="duration_hours"/>
+                    <field name="planning_id"/>
                 </tree>
             </field>
         </record>
@@ -116,6 +186,12 @@
         <menuitem id="is_gestion_tache_menu_root" 
                   name="Gestion des Tâches" 
                   sequence="86"/>
+
+        <menuitem id="is_gestion_tache_planning_menu" 
+                  name="Plannings" 
+                  parent="is_gestion_tache_menu_root" 
+                  action="is_gestion_tache_planning_action" 
+                  sequence="5"/>
 
         <menuitem id="is_gestion_tache_menu" 
                   name="Tâches" 
