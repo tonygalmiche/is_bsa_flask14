@@ -332,8 +332,9 @@ def date_to_slot(task_date):
     return result_slot
 
 def hours_to_slots(hours):
-    """Convertit un nombre d'heures en nombre de slots"""
-    return int(round(hours / HALF_DAY_HOURS))
+    """Convertit un nombre d'heures en nombre de slots (arrondi à l'entier supérieur)"""
+    import math
+    return int(math.ceil(hours / HALF_DAY_HOURS))
 
 def slots_to_hours(slots):
     """Convertit un nombre de slots en heures"""
