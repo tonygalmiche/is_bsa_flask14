@@ -2,6 +2,10 @@
 
 <odoo>
     <data>
+
+
+
+        
         <!-- bsa.fnc.categorie --> 
         <!-- <record model="ir.ui.view" id="bsa_fnc_categorie_form_view">
             <field name="name">bsa_fnc_categorie_form_view</field>

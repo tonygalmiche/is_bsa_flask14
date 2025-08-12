@@ -96,7 +96,7 @@
                                      data-start-slot="{{ task.start_slot }}"
                                      data-duration="{{ task.duration }}"
                                      data-affair-id="{{ task.affair_id }}"
-                                     data-title="{{ task.title }}"
+                                     data-title="{{ task.name }}"
                                      data-affair-name="{{ affair.name }}"
                                      style="background-color: {{ affair.color }}; 
                                             left: calc({{ task.start_slot }} * var(--slot-width)); 
@@ -109,7 +109,7 @@
                                      onkeydown="handleKeyDown(event)">
                                     
                                     <div class="task-content">
-                                        <div class="task-title">{{ task.title }}</div>
+                                        <div class="task-title">{{ task.name }}</div>
                                         <div class="task-affair">{{ affair.name }}</div>
                                     </div>
                                     

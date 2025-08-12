@@ -12,38 +12,7 @@ class DateTimeEncoder(json.JSONEncoder):
             return obj.isoformat()
         return super().default(obj)
 
-# Configuration de Flask pour utiliser notre encodeur
 app.json_encoder = DateTimeEncoder
-
-# Log pour toutes les requêtes (désactivé)
-# @app.before_request
-# def log_request():
-#     if request.method == 'POST':
-#         print(f"\n🌐 REQUÊTE POST reçue: {request.path}", flush=True)
-#         print(f"   Content-Type: {request.content_type}", flush=True)
-#         if request.is_json:
-#             print(f"   JSON: {request.get_@app.route('/resize_task', methods=['POST'])
-# def resize_task():
-#     """Endpoint unifié pour redimensionner une tâche (avec ou sans déplacement)"""
-#     try:
-#         data = request.get_json()
-#         if not data:
-#             return jsonify({"success": False, "error": "Données JSON manquantes"})
-        
-#         task_id = data.get('task_id')
-#         new_duration_raw = data.get('duration')
-#         new_start_slot_raw = data.get('start_slot')  # Optionnel pour left resize
-#         operator_id_raw = data.get('operator_id')    # Optionnel pour left resize
-        
-#         # Log avant traitement
-#         if new_start_slot_raw is not None:
-#             print(f"🔍 RESIZE_TASK (avec déplacement) - task_id: {task_id}, durée: {new_duration_raw}, position: {new_start_slot_raw}")
-#         else:
-#             print(f"🔍 RESIZE_TASK (simple) - task_id: {task_id}, nouvelle durée: {new_duration_raw}")
-        
-#         if not task_id:
-
-
 
 SLOT_WIDTH = 25  # Largeur d'un créneau en pixels (divisé par 3 : 60 -> 20)
 ROW_HEIGHT = 55  # Hauteur d'une ligne d'opérateur
@@ -109,7 +78,7 @@ TASKS = [
         "affair_id": 1,
         "start_date": datetime.combine(START_DATE, datetime.min.time().replace(hour=8)),  # Slot 0 (Jour 1 AM)
         "duration_hours": 21,  # 6 slots (3.5h * 6 = 21h)
-        "title": "Analyse Alpha"
+        "name": "Analyse Alpha"
     },
     {
         "id": str(uuid.uuid4()),
@@ -117,7 +86,7 @@ TASKS = [
         "affair_id": 2,
         "start_date": datetime.combine(START_DATE + timedelta(days=4), datetime.min.time().replace(hour=8)),  # Slot 8 (Jour 5 AM)
         "duration_hours": 14,  # 4 slots (3.5h * 4 = 14h)
-        "title": "Dev Beta"
+        "name": "Dev Beta"
     },
     {
         "id": str(uuid.uuid4()),
@@ -125,7 +94,7 @@ TASKS = [
         "affair_id": 3,
         "start_date": datetime.combine(START_DATE + timedelta(days=1), datetime.min.time().replace(hour=8)),  # Slot 2 (Jour 2 AM)
         "duration_hours": 17.5,  # 5 slots (3.5h * 5 = 17.5h)
-        "title": "Tests Gamma"
+        "name": "Tests Gamma"
     },
     {
         "id": str(uuid.uuid4()),
@@ -133,7 +102,7 @@ TASKS = [
         "affair_id": 4,
         "start_date": datetime.combine(START_DATE + timedelta(days=5), datetime.min.time().replace(hour=8)),  # Slot 10 (Jour 6 AM)
         "duration_hours": 21,  # 6 slots (3.5h * 6 = 21h)
-        "title": "Review Delta"
+        "name": "Review Delta"
     },
     {
         "id": str(uuid.uuid4()),
@@ -141,7 +110,7 @@ TASKS = [
         "affair_id": 5,
         "start_date": datetime.combine(START_DATE + timedelta(days=2), datetime.min.time().replace(hour=8)),  # Slot 4 (Jour 3 AM)
         "duration_hours": 10.5,  # 3 slots (3.5h * 3 = 10.5h)
-        "title": "Config Epsilon"
+        "name": "Config Epsilon"
     },
     {
         "id": str(uuid.uuid4()),
@@ -149,7 +118,7 @@ TASKS = [
         "affair_id": 1,
         "start_date": datetime.combine(START_DATE + timedelta(days=4), datetime.min.time().replace(hour=15)),  # Slot 9 (Jour 5 PM)
         "duration_hours": 14,  # 4 slots (3.5h * 4 = 14h)
-        "title": "Impl Alpha"
+        "name": "Impl Alpha"
     },
     {
         "id": str(uuid.uuid4()),
@@ -157,7 +126,7 @@ TASKS = [
         "affair_id": 6,
         "start_date": datetime.combine(START_DATE + timedelta(days=6), datetime.min.time().replace(hour=8)),  # Slot 12 (Jour 7 AM)
         "duration_hours": 17.5,  # 5 slots
-        "title": "Design Zeta"
+        "name": "Design Zeta"
     },
     {
         "id": str(uuid.uuid4()),
@@ -165,7 +134,7 @@ TASKS = [
         "affair_id": 7,
         "start_date": datetime.combine(START_DATE + timedelta(days=7), datetime.min.time().replace(hour=8)),  # Slot 14 (Jour 8 AM)
         "duration_hours": 14,  # 4 slots
-        "title": "Debug Eta"
+        "name": "Debug Eta"
     },
     {
         "id": str(uuid.uuid4()),
@@ -173,7 +142,7 @@ TASKS = [
         "affair_id": 8,
         "start_date": datetime.combine(START_DATE + timedelta(days=9), datetime.min.time().replace(hour=8)),  # Slot 18 (Jour 10 AM)
         "duration_hours": 10.5,  # 3 slots
-        "title": "Deploy Theta"
+        "name": "Deploy Theta"
     },
     {
         "id": str(uuid.uuid4()),
@@ -181,7 +150,7 @@ TASKS = [
         "affair_id": 2,
         "start_date": datetime.combine(START_DATE + timedelta(days=10), datetime.min.time().replace(hour=8)),  # Slot 20 (Jour 11 AM)
         "duration_hours": 14,  # 4 slots
-        "title": "Setup Beta"
+        "name": "Setup Beta"
     },
     {
         "id": str(uuid.uuid4()),
@@ -189,7 +158,7 @@ TASKS = [
         "affair_id": 7,
         "start_date": datetime.combine(START_DATE + timedelta(days=12), datetime.min.time().replace(hour=8)),  # Slot 24 (Jour 13 AM)
         "duration_hours": 10.5,  # 3 slots
-        "title": "Test Eta"
+        "name": "Test Eta"
     },
     {
         "id": str(uuid.uuid4()),
@@ -197,7 +166,7 @@ TASKS = [
         "affair_id": 3,
         "start_date": datetime.combine(START_DATE + timedelta(days=13), datetime.min.time().replace(hour=15)),  # Slot 27 (Jour 14 PM)
         "duration_hours": 17.5,  # 5 slots
-        "title": "Code Gamma"
+        "name": "Code Gamma"
     },
     {
         "id": str(uuid.uuid4()),
@@ -205,7 +174,7 @@ TASKS = [
         "affair_id": 4,
         "start_date": datetime.combine(START_DATE + timedelta(days=15), datetime.min.time().replace(hour=8)),  # Slot 30 (Jour 16 AM)
         "duration_hours": 14,  # 4 slots
-        "title": "QA Delta"
+        "name": "QA Delta"
     },
     {
         "id": str(uuid.uuid4()),
@@ -213,7 +182,7 @@ TASKS = [
         "affair_id": 5,
         "start_date": datetime.combine(START_DATE + timedelta(days=16), datetime.min.time().replace(hour=15)),  # Slot 33 (Jour 17 PM)
         "duration_hours": 10.5,  # 3 slots
-        "title": "Doc Epsilon"
+        "name": "Doc Epsilon"
     },
     {
         "id": str(uuid.uuid4()),
@@ -221,7 +190,7 @@ TASKS = [
         "affair_id": 1,
         "start_date": datetime.combine(START_DATE + timedelta(days=18), datetime.min.time().replace(hour=8)),  # Slot 36 (Jour 19 AM)
         "duration_hours": 14,  # 4 slots
-        "title": "Review Alpha"
+        "name": "Review Alpha"
     },
     {
         "id": str(uuid.uuid4()),
@@ -229,7 +198,7 @@ TASKS = [
         "affair_id": 6,
         "start_date": datetime.combine(START_DATE + timedelta(days=20), datetime.min.time().replace(hour=8)),  # Slot 40 (Jour 21 AM)
         "duration_hours": 21,  # 6 slots
-        "title": "Arch Zeta"
+        "name": "Arch Zeta"
     }
 ]
 
@@ -967,7 +936,7 @@ def debug_tasks():
     debug_info = []
     for task in TASKS:
         debug_info.append({
-            "title": task["title"],
+            "name": task["name"],
             "operator_id": task["operator_id"],
             "start_date": str(task["start_date"]),
             "duration_hours": task["duration_hours"],
