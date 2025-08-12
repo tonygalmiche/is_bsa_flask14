@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<odoo>
+    <data>
+        <!-- bsa.fnc.categorie --> 
+        <!-- <record model="ir.ui.view" id="bsa_fnc_categorie_form_view">
+            <field name="name">bsa_fnc_categorie_form_view</field>
+            <field name="model">bsa.fnc.categorie</field>
+            <field name="type">form</field>
+            <field name="arch" type="xml">
+                <form>  
+                    <sheet>
+                        <group>
+                            <field name="name"/> 
+                        </group>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+        <record model="ir.ui.view" id="bsa_fnc_categorie_tree_view">
+            <field name="name">bsa_fnc_categorie_tree_view</field>
+            <field name="model">bsa.fnc.categorie</field>
+            <field name="type">tree</field>
+            <field name="arch" type="xml">
+                <tree>
+                    <field name="name"/>
+                </tree>
+            </field>
+        </record>
+        <record model="ir.ui.view" id="bsa_fnc_categorie_search_view" >
+            <field name="name">bsa_fnc_categorie_search_view</field>
+            <field name="model">bsa.fnc.categorie</field>
+            <field name="arch" type="xml">
+                <search>
+                    <field name="name"/>
+                </search>
+            </field>
+        </record>
+        <record model="ir.actions.act_window" id="bsa_fnc_categorie_action">
+            <field name="name">Catégorie FNC</field>
+            <field name="res_model">bsa.fnc.categorie</field>
+            <field name="view_mode">tree,form</field>
+        </record> -->
+
+    </data>
+</odoo>

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planning des Opérateurs</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        :root {
+            --slot-width: {{ slot_width }}px;
+            --row-height: {{ row_height }}px;
+            --header-height: {{ header_height }}px;
+            --num-slots: {{ num_slots }};
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Planning des Opérateurs</h1>
+        
+        <div class="planning-container">
+            <!-- Conteneur global avec scroll horizontal unique -->
+            <div class="planning-scroll-container">
+                <!-- En-tête avec les créneaux horaires -->
+                <div class="time-header">
+                    <div class="operator-name-header">Opérateur</div>
+                    <div class="time-header-slots">
+                        <div class="time-header-slots-inner">
+                            <!-- Ligne des mois -->
+                            <div class="header-row header-months">
+                                {% for month in months %}
+                                    <div class="header-cell month-cell" style="width: calc({{ month.span }} * var(--slot-width));">
+                                        {{ month.name }}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            
+                            <!-- Ligne des semaines -->
+                            <div class="header-row header-weeks">
+                                {% for week in weeks %}
+                                    <div class="header-cell week-cell" style="width: calc({{ week.span }} * var(--slot-width));">
+                                        {{ week.name }}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            
+                            <!-- Ligne des jours -->
+                            <div class="header-row header-days">
+                                {% for day in days %}
+                                    <div class="header-cell day-cell{% if day.day_name in ['Sat', 'Sun'] %} weekend-header{% endif %}">
+                                        <div class="day-date">{{ day.date }}</div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            
+                            <!-- Ligne AM/PM -->
+                            <div class="header-row header-periods">
+                                {% for slot in time_slots %}
+                                    <div class="header-cell period-cell{% if slot.day_name in ['Sat', 'Sun'] %} weekend-header{% endif %}{% if slot.is_vacation %} vacation-header{% endif %}">{{ slot.period }}</div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Zone de contenu avec défilement vertical -->
+                <div class="operators-container">
+                    <!-- Lignes des opérateurs -->
+                    {% for operator in operators %}
+                    <div class="operator-row" data-operator-id="{{ operator.id }}">
+                        <div class="operator-name">
+                            {{ operator.name }}
+                        </div>
+                        
+                        <!-- Grille des créneaux pour cet opérateur -->
+                        <div class="time-slots-container">
+                            <div class="time-slots-wrapper">
+                                {% for slot in time_slots %}
+                                <div class="time-slot{% if slot.day_name in ['Sat', 'Sun'] %} weekend-slot{% endif %}{% if slot.is_vacation %} vacation-slot{% endif %}{% if operator_absences[operator.id][slot.slot] %} absence-slot{% endif %}" 
+                                     data-operator-id="{{ operator.id }}" 
+                                     data-slot="{{ slot.slot }}"
+                                     ondrop="handleDrop(event)" 
+                                     ondragover="handleDragOver(event)">
+                                </div>
+                                {% endfor %}
+                                
+                                <!-- Tâches pour cet opérateur -->
+                                {% for task in tasks %}
+                                {% if task.operator_id == operator.id %}
+                                {% set affair = affairs|selectattr("id", "equalto", task.affair_id)|first %}
+                                <div class="task" 
+                                     data-task-id="{{ task.id }}"
+                                     data-operator-id="{{ task.operator_id }}"
+                                     data-start-slot="{{ task.start_slot }}"
+                                     data-duration="{{ task.duration }}"
+                                     data-affair-id="{{ task.affair_id }}"
+                                     data-title="{{ task.title }}"
+                                     data-affair-name="{{ affair.name }}"
+                                     style="background-color: {{ affair.color }}; 
+                                            left: calc({{ task.start_slot }} * var(--slot-width)); 
+                                            width: calc({{ task.duration }} * var(--slot-width) - 2px);"
+                                     draggable="true"
+                                     ondragstart="handleDragStart(event)"
+                                     onmouseenter="showTooltip(event)"
+                                     onmouseleave="hideTooltip(event)"
+                                     tabindex="0"
+                                     onkeydown="handleKeyDown(event)">
+                                    
+                                    <div class="task-content">
+                                        <div class="task-title">{{ task.title }}</div>
+                                        <div class="task-affair">{{ affair.name }}</div>
+                                    </div>
+                                    
+                                    <!-- Poignée de redimensionnement -->
+                                    <div class="resize-handle resize-right" 
+                                         onmousedown="startResize(event, 'right')"
+                                         onclick="event.stopPropagation()"></div>
+                                </div>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <!-- Barre de défilement horizontal en bas -->
+                <div class="horizontal-scrollbar">
+                    <div class="horizontal-scrollbar-content"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tooltip pour les tâches -->
+    <div id="task-tooltip" class="task-tooltip">
+        <div class="task-tooltip-content">
+            <div class="task-tooltip-title"></div>
+            <div class="task-tooltip-detail"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

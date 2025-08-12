@@ -1,0 +1,591 @@
+:root {
+    --slot-width: 25px; /* Mise à jour pour correspondre à SLOT_WIDTH dans app.py */
+    --row-height: 55px; /* Réduit de 80px à 55px (30% de réduction) */
+    --header-height: 80px; /* Augmenté pour les 4 lignes mais resserré */
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 10px; /* Réduit de 20px à 10px */
+    background-color: #f5f5f5;
+    font-size: 14px;
+    height: 100vh; /* Hauteur complète de la fenêtre */
+    overflow: hidden; /* Évite le double scroll */
+}
+
+.container {
+    max-width: 100%;
+    margin: 0 auto;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    overflow: hidden;
+    height: calc(100vh - 20px); /* Prend toute la hauteur moins le padding du body */
+    display: flex;
+    flex-direction: column;
+}
+
+h1 {
+    margin: 0;
+    padding: 8px 15px; /* Réduit de 20px à 8px vertical et 15px horizontal */
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    text-align: center;
+    flex-shrink: 0; /* Empêche la compression du titre */
+    font-size: 18px; /* Réduit la taille de police */
+    font-weight: 500; /* Moins gras */
+}
+
+.planning-container {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #ddd;
+}
+
+/* Conteneur principal avec scroll horizontal unique mais structure fixe */
+.planning-scroll-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%; /* Important pour que les enfants puissent avoir une hauteur */
+}
+
+/* En-tête des créneaux horaires - reste toujours visible */
+.time-header {
+    display: flex;
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    height: var(--header-height);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 200;
+}
+
+.operator-name-header {
+    width: 200px;
+    min-width: 200px;
+    padding: 10px;
+    font-weight: bold;
+    border-right: 1px solid #dee2e6;
+    background: #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0; /* Empêche la compression */
+}
+
+.time-header-slots {
+    flex: 1;
+    overflow: hidden; /* Pas de scroll sur l'en-tête */
+    display: flex;
+    width: 0; /* Force le débordement */
+}
+
+/* Barre de défilement horizontal en bas */
+.horizontal-scrollbar {
+    height: 16px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-top: 1px solid #dee2e6;
+    background: #f8f9fa;
+    scrollbar-width: auto; /* Force l'affichage sur Firefox */
+    scrollbar-color: #555 #e9ecef; /* Couleurs plus contrastées pour Firefox */
+}
+
+.horizontal-scrollbar::-webkit-scrollbar {
+    height: 16px; /* Plus épais pour être plus visible */
+}
+
+.horizontal-scrollbar::-webkit-scrollbar-track {
+    background: #e9ecef;
+    border-radius: 0;
+}
+
+.horizontal-scrollbar::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 8px;
+    border: 2px solid #e9ecef;
+    min-width: 30px; /* Largeur minimum pour la poignée */
+}
+
+.horizontal-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #333;
+}
+
+.horizontal-scrollbar-content {
+    width: calc(200px + var(--num-slots, 90) * var(--slot-width)); /* Largeur totale : colonne opérateurs + slots */
+    height: 1px;
+    pointer-events: none;
+}
+
+/* Zone de contenu avec défilement vertical uniquement */
+.operators-container {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: auto; /* Force un scrollbar plus épais sur Firefox */
+    scrollbar-color: #555 #e9ecef; /* Couleurs contrastées pour Firefox */
+    height: 0; /* Force le flex-grow à fonctionner */
+}
+
+.operators-container::-webkit-scrollbar {
+    width: 16px; /* Plus épais pour être plus visible */
+}
+
+.operators-container::-webkit-scrollbar-track {
+    background: #e9ecef;
+    border-radius: 0;
+}
+
+.operators-container::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 8px;
+    border: 2px solid #e9ecef;
+    min-height: 30px; /* Hauteur minimum pour la poignée */
+}
+
+.operators-container::-webkit-scrollbar-thumb:hover {
+    background: #333;
+}
+
+.time-slot-header {
+    width: var(--slot-width);
+    min-width: var(--slot-width);
+    padding: 5px;
+    text-align: center;
+    border-right: 1px solid #dee2e6;
+    font-size: 11px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* Conteneur interne dans l'en-tête pour forcer la largeur */
+.time-header-slots-inner {
+    display: flex;
+    flex-direction: column;
+    min-width: calc(var(--num-slots, 90) * var(--slot-width)); /* Largeur totale dynamique */
+    height: 100%;
+}
+
+/* Lignes d'en-tête */
+.header-row {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+.header-months {
+    background: #e3f2fd;
+    border-bottom: 0.5px solid #ddd;
+}
+
+.header-weeks {
+    background: #f3e5f5;
+    border-bottom: 0.5px solid #ddd;
+}
+
+.header-days {
+    background: #e8f5e8;
+    border-bottom: 0.5px solid #ddd;
+}
+
+.header-periods {
+    background: #fff3e0;
+}
+
+/* Cellules d'en-tête */
+.header-cell {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    border: 0.5px solid #ddd;
+    background-color: #f5f5f5;
+    padding: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    font-size: 10px;
+}
+
+.month-cell {
+    font-weight: bold;
+    font-size: 10px;
+    min-width: var(--slot-width);
+}
+
+.week-cell {
+    font-weight: bold;
+    font-size: 10px;
+    min-width: var(--slot-width);
+}
+
+.day-cell {
+    width: calc(var(--slot-width) * 2); /* Un jour = 2 créneaux (AM/PM) */
+    flex-direction: column;
+    padding: 1px;
+}
+
+.day-cell.weekend-header {
+    background-color: #e0e0e0;
+}
+
+.period-cell.vacation-header {
+    background-color: #ffe0b3; /* Orange clair pour les en-têtes de congés */
+}
+
+.period-cell.weekend-header.vacation-header {
+    background-color: #ffcc80; /* Mélange weekend + congé pour les en-têtes */
+}
+
+.day-date {
+    font-weight: bold;
+    font-size: 10px;
+    line-height: 1;
+}
+
+.day-name {
+    font-size: 10px;
+    color: #6c757d;
+    line-height: 1;
+}
+
+.period-cell {
+    width: var(--slot-width);
+    font-size: 10px;
+    font-weight: normal;
+}
+
+/* Lignes des opérateurs avec structure fixe */
+.operator-row {
+    display: flex;
+    border-bottom: 1px solid #dee2e6;
+    height: var(--row-height);
+    position: relative;
+}
+
+.operator-name {
+    width: 200px;
+    min-width: 200px;
+    padding: 15px;
+    font-weight: 500;
+    border-right: 1px solid #dee2e6;
+    background: #f8f9fa;
+    display: flex;
+    align-items: center;
+    color: #495057;
+    flex-shrink: 0; /* Empêche la compression */
+}
+
+.time-slots-container {
+    position: relative;
+    flex: 1;
+    height: 100%;
+    overflow-x: auto; /* Scroll horizontal sur chaque ligne */
+    overflow-y: hidden;
+    background: #ffffff;
+    scrollbar-width: none; /* Cache les scrollbars individuels */
+}
+
+.time-slots-container::-webkit-scrollbar {
+    display: none; /* Cache le scrollbar complètement */
+}
+
+/* Wrapper interne pour les slots avec largeur fixe */
+.time-slots-wrapper {
+    display: flex;
+    width: calc(var(--num-slots, 90) * var(--slot-width)); /* Largeur totale dynamique */
+    height: 100%;
+    position: relative;
+}
+
+.time-slot {
+    width: var(--slot-width);
+    min-width: var(--slot-width);
+    height: 100%;
+    border-right: 1px solid #e9ecef;
+    position: relative;
+    background: #fafafa;
+    transition: background-color 0.2s;
+    flex-shrink: 0; /* Empêche la compression */
+}
+
+.time-slot.weekend-slot {
+    background: #f0f0f0;
+}
+
+.time-slot.vacation-slot {
+    background: #ffe0b3; /* Orange clair pour les congés */
+}
+
+.time-slot.absence-slot {
+    background: #ff9933; /* Orange plus foncé pour les absences */
+}
+
+/* Priorité des styles : absence > congé > weekend */
+.time-slot.weekend-slot.vacation-slot {
+    background: #ffcc80; /* Mélange weekend + congé */
+}
+
+.time-slot.weekend-slot.absence-slot {
+    background: #ff9933; /* L'absence prend le dessus */
+}
+
+.time-slot.vacation-slot.absence-slot {
+    background: #ff9933; /* L'absence prend le dessus */
+}
+
+.time-slot:hover {
+    background-color: #e3f2fd;
+}
+
+.time-slot.weekend-slot:hover {
+    background-color: #e8e8e8;
+}
+
+.time-slot.vacation-slot:hover {
+    background-color: #ffd699;
+}
+
+.time-slot.absence-slot:hover {
+    background-color: #ff8000;
+}
+
+.time-slot.drag-over {
+    background-color: #bbdefb !important;
+    border: 2px dashed #2196f3;
+}
+
+/* Tâches */
+.task {
+    position: absolute;
+    top: 2px; /* Réduit de 5px à 2px */
+    height: calc(100% - 4px); /* Réduit de 10px à 4px total */
+    border-radius: 4px; /* Réduit de 6px à 4px */
+    cursor: move;
+    display: flex;
+    align-items: center;
+    padding: 4px 6px; /* Réduit de 8px à 4px vertical et 6px horizontal */
+    color: white;
+    font-weight: 500;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2); /* Réduit l'ombre */
+    border: 1px solid transparent; /* Réduit de 2px à 1px */
+    transition: all 0.2s ease;
+    user-select: none;
+    z-index: 10;
+}
+
+.task:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    z-index: 20;
+}
+
+.task:focus {
+    outline: none;
+    border-color: #fff;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.5);
+    z-index: 30;
+}
+
+.task.selected {
+    outline: none;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.8), 0 4px 8px rgba(0,0,0,0.3);
+    z-index: 30;
+}
+
+.task.dragging {
+    opacity: 0.7;
+    transform: rotate(2deg);
+    z-index: 50;
+    pointer-events: none; /* Permet aux événements de passer à travers la tâche en cours de drag */
+}
+
+/* Pendant qu'un drag est en cours, toutes les autres tâches doivent aussi laisser passer les événements */
+body.dragging-active .task:not(.dragging) {
+    pointer-events: none;
+}
+
+.task.resizing {
+    z-index: 40;
+}
+
+.task-content {
+    flex: 1;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.task-title {
+    font-size: 11px; /* Augmenté de 20% : 9px * 1.2 = 10.8px ≈ 11px */
+    font-weight: bold;
+    margin-bottom: 1px; /* Réduit de 2px à 1px */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.1; /* Réduit l'interligne */
+}
+
+.task-affair {
+    font-size: 10px; /* Augmenté de 20% : 8px * 1.2 = 9.6px ≈ 10px */
+    opacity: 0.9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.0; /* Réduit l'interligne */
+}
+
+/* Poignées de redimensionnement */
+.resize-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: ew-resize;
+    background: rgba(255,255,255,0.3);
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.task:hover .resize-handle {
+    opacity: 1;
+}
+
+.resize-right {
+    right: 0;
+    border-radius: 0 6px 6px 0;
+}
+
+.resize-handle:hover {
+    background: rgba(255,255,255,0.6);
+}
+
+/* Indicateurs visuels pour le déplacement */
+.drop-indicator {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: #2196f3;
+    z-index: 100;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Styles responsifs */
+@media (max-width: 768px) {
+    :root {
+        --slot-width: 16px; /* Encore plus petit sur mobile */
+        --row-height: 45px; /* Ajusté pour la version mobile */
+    }
+    
+    .operator-name {
+        width: 150px;
+        min-width: 150px;
+        font-size: 12px;
+    }
+    
+    .operator-name-header {
+        width: 150px;
+        min-width: 150px;
+    }
+    
+    .task-title {
+        font-size: 11px;
+    }
+    
+    .task-affair {
+        font-size: 9px;
+    }
+}
+
+/* Infobulles */
+.task-tooltip {
+    position: absolute;
+    background: rgba(33, 37, 41, 0.95);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    z-index: 1000;
+    pointer-events: none;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    transform: translateX(-50%);
+}
+
+.task-tooltip.show {
+    opacity: 1;
+}
+
+.task-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border: 5px solid transparent;
+    border-top-color: rgba(33, 37, 41, 0.95);
+}
+
+.task-tooltip-content {
+    line-height: 1.4;
+}
+
+.task-tooltip-title {
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+.task-tooltip-detail {
+    font-size: 11px;
+    opacity: 0.9;
+}
+
+/* Animations de feedback */
+.task-moved {
+    animation: taskMoved 0.3s ease-out;
+}
+
+@keyframes taskMoved {
+    0% {
+        transform: scale(1.05);
+        box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+    }
+    100% {
+        transform: scale(1);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+}
+
+.task-collision {
+    animation: taskCollision 0.5s ease-out;
+}
+
+@keyframes taskCollision {
+    0%, 20%, 40%, 60%, 80% {
+        transform: translateX(-2px);
+    }
+    10%, 30%, 50%, 70%, 90% {
+        transform: translateX(2px);
+    }
+    100% {
+        transform: translateX(0);
+    }
+}
