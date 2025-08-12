@@ -172,6 +172,84 @@ def get_default_operators():
         {"id": 10, "name": "Julie Garnier", "absences": []}
     ]
 
+def load_tasks_from_db():
+    """Charge les tâches depuis la base PostgreSQL"""
+    print("📋 Tentative de chargement des tâches depuis la base de données...")
+    try:
+        conn = get_db_connection()
+        if not conn:
+            print("❌ Impossible de se connecter à la base de données, utilisation des données par défaut")
+            return get_default_tasks()
+        
+        print("✅ Connexion à la base de données établie pour les tâches")
+        
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            print("📊 Exécution de la requête SQL pour les tâches...")
+            cursor.execute("""
+                SELECT id, name, operator_id, affaire as affaire_id, start_date, duration_hours
+                FROM is_gestion_tache 
+                ORDER BY start_date, operator_id
+            """)
+            
+            rows = cursor.fetchall()
+            print(f"📋 {len(rows)} tâches récupérées de la base")
+            
+            tasks = []
+            
+            for i, row in enumerate(rows):
+                print(f"  Tâche {i+1}: ID={row['id']}, Name='{row['name']}', Operator={row['operator_id']}, Affaire={row['affaire_id']}")
+                
+                # Convertir les données de la base vers le format attendu par l'application
+                task = {
+                    "id": str(row['id']),  # Convertir en string pour compatibilité
+                    "operator_id": row['operator_id'],
+                    "affaire_id": row['affaire_id'],
+                    "start_date": row['start_date'],  # PostgreSQL retourne déjà un datetime
+                    "duration_hours": float(row['duration_hours']),  # S'assurer que c'est un float
+                    "name": row['name']
+                }
+                
+                tasks.append(task)
+            
+            conn.close()
+            print(f"✅ {len(tasks)} tâches chargées depuis la base de données")
+            print(f"📦 Données tâches finales: {tasks}")
+            return tasks
+            
+    except Exception as e:
+        print(f"❌ Erreur lors du chargement des tâches: {e}")
+        print("🔄 Utilisation des données par défaut pour les tâches")
+        return get_default_tasks()
+
+def get_default_tasks():
+    """Retourne les tâches par défaut en cas de problème de base de données"""
+    return [
+        {
+            "id": str(uuid.uuid4()),
+            "operator_id": 1,
+            "affaire_id": 1,
+            "start_date": datetime.combine(START_DATE, datetime.min.time().replace(hour=8)),  # Slot 0 (Jour 1 AM)
+            "duration_hours": 21,  # 6 slots (3.5h * 6 = 21h)
+            "name": "Analyse Alpha"
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "operator_id": 1,
+            "affaire_id": 2,
+            "start_date": datetime.combine(START_DATE + timedelta(days=4), datetime.min.time().replace(hour=8)),  # Slot 8 (Jour 5 AM)
+            "duration_hours": 14,  # 4 slots (3.5h * 4 = 14h)
+            "name": "Dev Beta"
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "operator_id": 2,
+            "affaire_id": 3,
+            "start_date": datetime.combine(START_DATE + timedelta(days=1), datetime.min.time().replace(hour=8)),  # Slot 2 (Jour 2 AM)
+            "duration_hours": 17.5,  # 5 slots (3.5h * 5 = 17.5h)
+            "name": "Tests Gamma"
+        }
+    ]
+
 # Dates de congés (orange clair) - format datetime
 VACATION_DATES = [
     datetime(2025, 8, 15, 8, 0),   # 15 août AM
@@ -190,137 +268,10 @@ print("🚀 Initialisation: Chargement des affaires...")
 AFFAIRES = load_affaires_from_db()
 print(f"🎯 Variable AFFAIRES initialisée avec {len(AFFAIRES)} éléments: {AFFAIRES}")
 
-# Planning initial avec tâches pré-remplies - RÉPARTI SANS COLLISIONS
-TASKS = [
-    {
-        "id": str(uuid.uuid4()),
-        "operator_id": 1,
-        "affaire_id": 1,
-        "start_date": datetime.combine(START_DATE, datetime.min.time().replace(hour=8)),  # Slot 0 (Jour 1 AM)
-        "duration_hours": 21,  # 6 slots (3.5h * 6 = 21h)
-        "name": "Analyse Alpha"
-    },
-    {
-        "id": str(uuid.uuid4()),
-        "operator_id": 1,
-        "affaire_id": 2,
-        "start_date": datetime.combine(START_DATE + timedelta(days=4), datetime.min.time().replace(hour=8)),  # Slot 8 (Jour 5 AM)
-        "duration_hours": 14,  # 4 slots (3.5h * 4 = 14h)
-        "name": "Dev Beta"
-    },
-    {
-        "id": str(uuid.uuid4()),
-        "operator_id": 2,
-        "affaire_id": 3,
-        "start_date": datetime.combine(START_DATE + timedelta(days=1), datetime.min.time().replace(hour=8)),  # Slot 2 (Jour 2 AM)
-        "duration_hours": 17.5,  # 5 slots (3.5h * 5 = 17.5h)
-        "name": "Tests Gamma"
-    },
-    {
-        "id": str(uuid.uuid4()),
-        "operator_id": 2,
-        "affaire_id": 4,
-        "start_date": datetime.combine(START_DATE + timedelta(days=5), datetime.min.time().replace(hour=8)),  # Slot 10 (Jour 6 AM)
-        "duration_hours": 21,  # 6 slots (3.5h * 6 = 21h)
-        "name": "Review Delta"
-    },
-    {
-        "id": str(uuid.uuid4()),
-        "operator_id": 3,
-        "affaire_id": 5,
-        "start_date": datetime.combine(START_DATE + timedelta(days=2), datetime.min.time().replace(hour=8)),  # Slot 4 (Jour 3 AM)
-        "duration_hours": 10.5,  # 3 slots (3.5h * 3 = 10.5h)
-        "name": "Config Epsilon"
-    },
-    {
-        "id": str(uuid.uuid4()),
-        "operator_id": 3,
-        "affaire_id": 1,
-        "start_date": datetime.combine(START_DATE + timedelta(days=4), datetime.min.time().replace(hour=15)),  # Slot 9 (Jour 5 PM)
-        "duration_hours": 14,  # 4 slots (3.5h * 4 = 14h)
-        "name": "Impl Alpha"
-    },
-    {
-        "id": str(uuid.uuid4()),
-        "operator_id": 4,
-        "affaire_id": 6,
-        "start_date": datetime.combine(START_DATE + timedelta(days=6), datetime.min.time().replace(hour=8)),  # Slot 12 (Jour 7 AM)
-        "duration_hours": 17.5,  # 5 slots
-        "name": "Design Zeta"
-    },
-    {
-        "id": str(uuid.uuid4()),
-        "operator_id": 5,
-        "affaire_id": 7,
-        "start_date": datetime.combine(START_DATE + timedelta(days=7), datetime.min.time().replace(hour=8)),  # Slot 14 (Jour 8 AM)
-        "duration_hours": 14,  # 4 slots
-        "name": "Debug Eta"
-    },
-    {
-        "id": str(uuid.uuid4()),
-        "operator_id": 5,
-        "affaire_id": 8,
-        "start_date": datetime.combine(START_DATE + timedelta(days=9), datetime.min.time().replace(hour=8)),  # Slot 18 (Jour 10 AM)
-        "duration_hours": 10.5,  # 3 slots
-        "name": "Deploy Theta"
-    },
-    {
-        "id": str(uuid.uuid4()),
-        "operator_id": 6,
-        "affaire_id": 2,
-        "start_date": datetime.combine(START_DATE + timedelta(days=10), datetime.min.time().replace(hour=8)),  # Slot 20 (Jour 11 AM)
-        "duration_hours": 14,  # 4 slots
-        "name": "Setup Beta"
-    },
-    {
-        "id": str(uuid.uuid4()),
-        "operator_id": 6,
-        "affaire_id": 7,
-        "start_date": datetime.combine(START_DATE + timedelta(days=12), datetime.min.time().replace(hour=8)),  # Slot 24 (Jour 13 AM)
-        "duration_hours": 10.5,  # 3 slots
-        "name": "Test Eta"
-    },
-    {
-        "id": str(uuid.uuid4()),
-        "operator_id": 7,
-        "affaire_id": 3,
-        "start_date": datetime.combine(START_DATE + timedelta(days=13), datetime.min.time().replace(hour=15)),  # Slot 27 (Jour 14 PM)
-        "duration_hours": 17.5,  # 5 slots
-        "name": "Code Gamma"
-    },
-    {
-        "id": str(uuid.uuid4()),
-        "operator_id": 8,
-        "affaire_id": 4,
-        "start_date": datetime.combine(START_DATE + timedelta(days=15), datetime.min.time().replace(hour=8)),  # Slot 30 (Jour 16 AM)
-        "duration_hours": 14,  # 4 slots
-        "name": "QA Delta"
-    },
-    {
-        "id": str(uuid.uuid4()),
-        "operator_id": 9,
-        "affaire_id": 5,
-        "start_date": datetime.combine(START_DATE + timedelta(days=16), datetime.min.time().replace(hour=15)),  # Slot 33 (Jour 17 PM)
-        "duration_hours": 10.5,  # 3 slots
-        "name": "Doc Epsilon"
-    },
-    {
-        "id": str(uuid.uuid4()),
-        "operator_id": 9,
-        "affaire_id": 1,
-        "start_date": datetime.combine(START_DATE + timedelta(days=18), datetime.min.time().replace(hour=8)),  # Slot 36 (Jour 19 AM)
-        "duration_hours": 14,  # 4 slots
-        "name": "Review Alpha"
-    },
-    {
-        "id": str(uuid.uuid4()),
-        "operator_id": 10,
-        "affaire_id": 6,
-        "start_date": datetime.combine(START_DATE + timedelta(days=20), datetime.min.time().replace(hour=8)),  # Slot 40 (Jour 21 AM)
-        "duration_hours": 21,  # 6 slots
-        "name": "Arch Zeta"
-    }
-]
+# Chargement dynamique des tâches depuis la base de données
+print("📋 Initialisation: Chargement des tâches...")
+TASKS = load_tasks_from_db()
+print(f"🎯 Variable TASKS initialisée avec {len(TASKS)} éléments")
 
 def date_to_slot(task_date):
     """Convertit une date/datetime en numéro de slot"""
@@ -1142,8 +1093,8 @@ def debug_html():
 
 @app.route('/api/reload-data', methods=['POST'])
 def reload_data():
-    """Recharge à la fois les opérateurs et les affaires depuis la base de données"""
-    global OPERATORS, AFFAIRES
+    """Recharge à la fois les opérateurs, les affaires et les tâches depuis la base de données"""
+    global OPERATORS, AFFAIRES, TASKS
     try:
         print("🔄 Rechargement complet des données...")
         
@@ -1155,18 +1106,24 @@ def reload_data():
         new_affaires = load_affaires_from_db()
         affaires_count = len(new_affaires)
         
+        # Recharger les tâches
+        new_tasks = load_tasks_from_db()
+        tasks_count = len(new_tasks)
+        
         # Mettre à jour les variables globales seulement si tout s'est bien passé
         OPERATORS = new_operators
         AFFAIRES = new_affaires
+        TASKS = new_tasks
         
-        message = f"{operators_count} opérateurs et {affaires_count} affaires rechargés"
+        message = f"{operators_count} opérateurs, {affaires_count} affaires et {tasks_count} tâches rechargés"
         print(f"✅ {message}")
         
         return jsonify({
             "success": True, 
             "message": message,
             "operators": OPERATORS,
-            "affairs": AFFAIRES
+            "affairs": AFFAIRES,
+            "tasks_count": tasks_count
         })
     except Exception as e:
         print(f"❌ Erreur lors du rechargement complet: {e}")
@@ -1202,6 +1159,23 @@ def reload_operators():
             "success": True, 
             "message": f"{len(OPERATORS)} opérateurs rechargés",
             "operators": OPERATORS
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False, 
+            "message": f"Erreur lors du rechargement: {str(e)}"
+        }), 500
+
+@app.route('/api/reload-tasks', methods=['POST'])
+def reload_tasks():
+    """Recharge les tâches depuis la base de données"""
+    global TASKS
+    try:
+        TASKS = load_tasks_from_db()
+        return jsonify({
+            "success": True, 
+            "message": f"{len(TASKS)} tâches rechargées",
+            "tasks_count": len(TASKS)
         })
     except Exception as e:
         return jsonify({
