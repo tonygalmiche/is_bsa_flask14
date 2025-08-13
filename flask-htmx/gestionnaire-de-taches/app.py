@@ -7,6 +7,7 @@ from psycopg2.extras import RealDictCursor
 import sys
 import os
 import pytz
+import math
 
 try:
     from config import DATABASE_CONFIG, DATABASE_BASE_CONFIG, DATABASES

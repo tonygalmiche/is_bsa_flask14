@@ -9,11 +9,13 @@ let recentlyResizedTasks = new Set(); // Protection contre l'écrasement après 
 
 // Initialisation
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM chargé, initialisation...');
     setupEventListeners();
     setupScrollSync();
     setupDragAndDrop();
     
     // Initialiser le double-clic sur les tâches
+    console.log('Initialisation du double-clic sur les tâches...');
     setupTaskDoubleClick();
 });
 
@@ -802,10 +804,19 @@ function showTooltip(event) {
         const affairName = task.dataset.affairName;
         const duration = task.dataset.duration;
         const startSlot = task.dataset.startSlot;
+        const taskId = task.dataset.taskId;
         
         // Calculer la position du slot (date/heure)
         const slotInfo = getSlotInfo(parseInt(startSlot));
         const endSlotInfo = getSlotInfo(parseInt(startSlot) + parseInt(duration) - 1);
+        
+        // Générer l'URL Odoo pour l'affichage dans l'info-bulle
+        let odooUrlHtml = '';
+        if (taskId && window.taskOdooConfig && window.taskOdooConfig.urlTemplate) {
+            const decodedTemplate = decodeHtmlEntities(window.taskOdooConfig.urlTemplate);
+            const taskUrl = decodedTemplate.replace('{}', taskId);
+            odooUrlHtml = `<div><strong>URL Odoo:</strong> <small style="word-break: break-all;">${taskUrl}</small></div>`;
+        }
         
         // Remplir le contenu de l'infobulle
         const titleElement = tooltip.querySelector('.task-tooltip-title');
@@ -816,6 +827,7 @@ function showTooltip(event) {
             <div><strong>Affaire:</strong> ${affairName}</div>
             <div><strong>Durée:</strong> ${duration} créneaux</div>
             <div><strong>Période:</strong> ${slotInfo.date} ${slotInfo.period}${duration > 1 ? ' → ' + endSlotInfo.date + ' ' + endSlotInfo.period : ''}</div>
+            ${odooUrlHtml}
         `;
         
         // Positionner l'infobulle
@@ -1001,11 +1013,16 @@ setupEventListeners = function() {
 
 // Gestion du double-clic pour ouvrir les tâches dans Odoo
 function setupTaskDoubleClick() {
+    console.log('setupTaskDoubleClick appelée');
     const urlTacheOdoo = window.taskOdooConfig ? window.taskOdooConfig.urlTemplate : '';
+    console.log('URL template:', urlTacheOdoo);
     
     if (urlTacheOdoo) {
+        const tasks = document.querySelectorAll('.task');
+        console.log('Nombre de tâches trouvées:', tasks.length);
+        
         // Ajouter un gestionnaire de double-clic sur toutes les tâches
-        document.querySelectorAll('.task').forEach(function(taskElement) {
+        tasks.forEach(function(taskElement) {
             // Supprimer les anciens gestionnaires pour éviter les doublons
             taskElement.removeEventListener('dblclick', handleTaskDoubleClick);
             
@@ -1016,19 +1033,49 @@ function setupTaskDoubleClick() {
             taskElement.style.cursor = 'pointer';
             taskElement.title = 'Double-cliquez pour ouvrir dans Odoo';
         });
+        
+        console.log('Gestionnaires de double-clic ajoutés à', tasks.length, 'tâches');
+    } else {
+        console.log('Pas d\'URL template configurée');
     }
+}
+
+// Fonction utilitaire pour décoder les entités HTML
+function decodeHtmlEntities(str) {
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = str;
+    return textarea.value;
 }
 
 // Gestionnaire de double-clic
 function handleTaskDoubleClick(event) {
+    console.log('Double-clic détecté sur tâche');
     event.preventDefault();
     event.stopPropagation();
     
     const taskId = this.getAttribute('data-task-id');
+    console.log('ID de la tâche:', taskId);
+    
     if (taskId && window.taskOdooConfig && window.taskOdooConfig.urlTemplate) {
-        // Remplacer {} par l'ID de la tâche dans l'URL
-        const taskUrl = window.taskOdooConfig.urlTemplate.replace('{}', taskId);
+        // Décoder les entités HTML et remplacer {} par l'ID de la tâche dans l'URL
+        const decodedTemplate = decodeHtmlEntities(window.taskOdooConfig.urlTemplate);
+        const taskUrl = decodedTemplate.replace('{}', taskId);
+        console.log('URL template (brut):', window.taskOdooConfig.urlTemplate);
+        console.log('URL template (décodé):', decodedTemplate);
+        console.log('URL générée:', taskUrl);
+        console.log('Tentative d\'ouverture de l\'URL dans un nouvel onglet...');
+        
         // Ouvrir dans un nouvel onglet
-        window.open(taskUrl, '_blank');
+        try {
+            window.open(taskUrl, '_blank');
+            console.log('Commande window.open() exécutée avec succès');
+        } catch (error) {
+            console.error('Erreur lors de l\'ouverture de l\'URL:', error);
+        }
+    } else {
+        console.log('Données manquantes pour ouvrir la tâche:');
+        console.log('- taskId:', taskId);
+        console.log('- window.taskOdooConfig:', window.taskOdooConfig);
+        console.log('- urlTemplate:', window.taskOdooConfig ? window.taskOdooConfig.urlTemplate : 'undefined');
     }
 }
