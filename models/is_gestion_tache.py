@@ -2,8 +2,21 @@
 from odoo import models,fields,api
 from odoo.exceptions import Warning
 from datetime import datetime
+import random
 
 
+def generer_couleur_foncee():
+    """
+    Génère une couleur hexadécimale aléatoire foncée pour assurer 
+    une bonne lisibilité du texte blanc
+    """
+    # Génère des valeurs RGB entre 0 et 150 pour garantir des couleurs foncées
+    r = random.randint(0, 190)
+    g = random.randint(0, 190) 
+    b = random.randint(0, 190)
+    
+    # Convertit en format hexadécimal
+    return "#{:02x}{:02x}{:02x}".format(r, g, b)
 
 
 class is_gestion_tache_planning(models.Model):
@@ -70,7 +83,7 @@ class is_gestion_tache_planning(models.Model):
                     and mp.state not in  ('cancer','done')
                     and line.workcenter_id=%s
                     and mp.is_pret='oui'
-                limit 20;
+                -- limit 20;
             """
             cr.execute(SQL,[self.workcenter_id.id])
             rows = cr.dictfetchall()   
@@ -78,7 +91,7 @@ class is_gestion_tache_planning(models.Model):
             for row in rows:
                 #** Ajout de l'affaire ****************************************
                 if row['order_id'] not in orders:
-                    color="#800303"
+                    color = generer_couleur_foncee()
                     vals={
                         "name"       : row['affaire_name'],
                         "planning_id": self.id,
@@ -91,29 +104,21 @@ class is_gestion_tache_planning(models.Model):
                 #**************************************************************
 
                 #** Ajout de la tache *****************************************
+                    start_date = row['start_date']
+                    if start_date< datetime.now():
+                        start_date =  datetime.now()
                     vals={
                         "name"          : "[%s] %s"%(row['mp_name'],row['line_name']),
                         "operator_id"   : operator_id,
                         "affaire_id"    : affaire.id,
-                        "start_date"    : datetime.now().date(), #row['start_date'],
+                        "start_date"    : start_date,
                         "duration_hours": row['duration_hours'],
                         "planning_id"   : self.id,
                     }
-                    print(vals)
                     res=self.env['is.gestion.tache'].create(vals)
                 #**************************************************************
 
         return True
-
-
-    # name           = fields.Char("Tache", required=True)
-    # operator_id    = fields.Many2one('hr.employee', string="Opérateur", required=True)
-    # affaire        = fields.Many2one('is.gestion.tache.affaire', string="Affaire", required=True)
-    # start_date     = fields.Datetime(string="Date de début", required=True)
-    # duration_hours = fields.Float(string="Durée (heures)", required=True)
-    # planning_id    = fields.Many2one('is.gestion.tache.planning', string="Planning", ondelete='cascade')
-
-
 
 
 class is_gestion_tache_affaire(models.Model):

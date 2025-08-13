@@ -109,7 +109,6 @@ def load_affaires_from_db(planning_id=None):
                 rows = cursor.fetchall()
                 
                 for i, row in enumerate(rows):
-                    print(i,row)
                     affaires.append({
                         "id": row['id'],
                         "name": row['name'],
@@ -144,8 +143,6 @@ def load_operators_from_db(planning_id=None):
                 operators = []
                 
                 for i, row in enumerate(rows):
-                    print('operator',i,row)
-
                     operators.append({
                         "id": row['id'],
                         "name": row['name'],
@@ -180,8 +177,6 @@ def load_tasks_from_db(planning_id=None):
                 """, (planning_id,))
                 rows = cursor.fetchall()
                 for i, row in enumerate(rows):
-
-                    print(i,row)
 
                     # Convertir l'heure UTC en heure de Paris
                     start_date_utc = row['start_date']
