@@ -182,28 +182,66 @@
             <field name="view_mode">tree,form</field>
         </record>
 
+        <!-- Action pour ouvrir l'application Flask -->
+        <record model="ir.actions.server" id="is_gestion_tache_flask_action">
+            <field name="name">Application Flask</field>
+            <field name="model_id" ref="base.model_res_company"/>
+            <field name="state">code</field>
+            <field name="code">
+company = env.user.company_id
+if company.is_url_app_flask:
+    action = {
+        'type': 'ir.actions.act_url',
+        'url': company.is_url_app_flask,
+        'target': 'new',
+    }
+else:
+    # Retourner une action qui affiche un message d'erreur
+    action = {
+        'type': 'ir.actions.client',
+        'tag': 'display_notification',
+        'params': {
+            'title': 'Configuration manquante',
+            'message': 'URL de l\'application Flask non configurée dans les paramètres de la société.',
+            'type': 'warning',
+            'sticky': False,
+        }
+    }
+            </field>
+        </record>
+
         <!-- Menus -->
         <menuitem id="is_gestion_tache_menu_root" 
-                  name="Gestion des Tâches" 
+                  name="Gestion de tâches" 
                   sequence="86"/>
 
         <menuitem id="is_gestion_tache_planning_menu" 
                   name="Plannings" 
                   parent="is_gestion_tache_menu_root" 
                   action="is_gestion_tache_planning_action" 
-                  sequence="5"/>
+                  sequence="10"/>
 
-        <menuitem id="is_gestion_tache_menu" 
+         <menuitem id="is_gestion_tache_menu" 
                   name="Tâches" 
                   parent="is_gestion_tache_menu_root" 
                   action="is_gestion_tache_action" 
-                  sequence="10"/>
+                  sequence="20"/>
 
         <menuitem id="is_gestion_tache_affaire_menu" 
                   name="Affaires" 
                   parent="is_gestion_tache_menu_root" 
                   action="is_gestion_tache_affaire_action" 
-                  sequence="20"/>
+                  sequence="30"/>
+
+
+       <menuitem id="is_gestion_tache_flask_menu" 
+                  name="Gestion de tâches" 
+                  parent="is_gestion_tache_menu_root" 
+                  action="is_gestion_tache_flask_action" 
+                  sequence="40"/>
+
+
+
 
     </data>
 </odoo>

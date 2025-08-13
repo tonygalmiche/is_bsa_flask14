@@ -18,6 +18,7 @@ app = Flask(__name__)
 # Configuration de base de données actuelle
 CURRENT_DATABASE_CONFIG = DATABASE_CONFIG.copy()
 CURRENT_DATABASE_NAME = ""
+CURRENT_DATABASE_URL_ODOO = ""
 CURRENT_PLANNING_ID = None
 
 # Sérialiseur personnalisé pour les dates
@@ -715,7 +716,7 @@ def database_selection():
 @app.route('/select_database/<database_id>')
 def select_database(database_id):
     """Sélectionne une base de données et redirige vers la sélection de planning"""
-    global CURRENT_DATABASE_CONFIG, CURRENT_DATABASE_NAME
+    global CURRENT_DATABASE_CONFIG, CURRENT_DATABASE_NAME, CURRENT_DATABASE_URL_ODOO
     
     # Trouver la configuration de la base de données
     selected_db = next((db for db in DATABASES if db['id'] == database_id), None)
@@ -730,6 +731,7 @@ def select_database(database_id):
         'database': selected_db['database']
     }
     CURRENT_DATABASE_NAME = selected_db['name']
+    CURRENT_DATABASE_URL_ODOO = selected_db.get('url_odoo', '')
     
     try:
         # Tester la connexion à la base
@@ -753,16 +755,18 @@ def planning_selection():
         plannings = load_plannings_from_db()
         return render_template('planning_selection.html', 
                              plannings=plannings,
-                             current_database=CURRENT_DATABASE_NAME)
+                             current_database=CURRENT_DATABASE_NAME,
+                             current_database_url_odoo=CURRENT_DATABASE_URL_ODOO)
     except Exception as e:
         return render_template('planning_selection.html', 
                              plannings=[], 
                              current_database=CURRENT_DATABASE_NAME,
+                             current_database_url_odoo=CURRENT_DATABASE_URL_ODOO,
                              error=str(e))
 
 @app.route('/select_planning/<int:planning_id>')
 def select_planning(planning_id):
-    """Sélectionne un planning et redirige vers le planning des opérateurs"""
+    """Sélectionne un planning et redirige vers 'Gestion de tâches'"""
     global CURRENT_PLANNING_ID, OPERATORS, AFFAIRES, TASKS
     
     try:
@@ -785,7 +789,7 @@ def select_planning(planning_id):
 
 @app.route('/planning')
 def planning():
-    """Page principale du planning des opérateurs"""
+    """Page principale 'Gestion de tâches'"""
     # Récupérer le nom du planning sélectionné
     current_planning_name = "Planning non sélectionné"
     if CURRENT_PLANNING_ID:
@@ -907,7 +911,8 @@ def planning():
                          num_slots=NUM_SLOTS,
                          start_date=START_DATE,
                          day_duration_hours=DAY_DURATION_HOURS,
-                         current_planning_name=current_planning_name)
+                         current_planning_name=current_planning_name,
+                         current_database_url_odoo=CURRENT_DATABASE_URL_ODOO)
 
 @app.route('/change_database')
 def change_database():

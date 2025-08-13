@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sélection du Planning - Planning BSA</title>
+    <title>Sélection du Planning</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
         .planning-selection-container {
@@ -189,7 +189,7 @@
 <body>
     <div class="planning-selection-container">
         <div class="selection-card">
-            <h1 class="selection-title">Planning BSA</h1>
+            <h1 class="selection-title">Gestion de tâches</h1>
             <p class="selection-subtitle">Sélectionnez un planning</p>
             
             <div class="database-info">
@@ -223,11 +223,16 @@
             {% endif %}
             
             <div class="footer-actions">
+                {% if current_database_url_odoo %}
+                <a href="{{ current_database_url_odoo }}" target="_blank" class="back-button" style="background-color: #007bff; color: white;">
+                    🏢 Ouvrir Odoo
+                </a>
+                {% endif %}
                 <a href="{{ url_for('database_selection') }}" class="back-button">
                     ← Changer de base de données
                 </a>
                 <div class="footer-info">
-                    Cliquez sur un planning pour accéder au planning des opérateurs
+                    Cliquez sur un planning pour accéder à 'Gestion de tâches'
                 </div>
             </div>
         </div>

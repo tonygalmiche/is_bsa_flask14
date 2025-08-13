@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Planning des Opérateurs - {{ current_planning_name }}</title>
+    <title>Gestion de tâches - {{ current_planning_name }}</title>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
@@ -19,8 +19,13 @@
 <body>
     <div class="container">
         <div class="header-actions">
-            <h1>Planning des Opérateurs - {{ current_planning_name }}</h1>
+            <h1>Gestion de tâches - {{ current_planning_name }}</h1>
             <div class="action-buttons">
+                {% if current_database_url_odoo %}
+                <button id="open-odoo-btn" class="btn btn-primary" onclick="window.open('{{ current_database_url_odoo }}', '_blank')" title="Ouvrir Odoo">
+                    🏢 Odoo
+                </button>
+                {% endif %}
                 <button id="change-planning-btn" class="btn btn-secondary" onclick="window.location.href='{{ url_for('change_planning') }}'">
                     📋 Changer de planning
                 </button>

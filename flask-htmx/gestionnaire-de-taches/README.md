@@ -1,4 +1,4 @@
-# Planning des Opérateurs - Flask + HTMX
+# Gestion de tâches - Flask + HTMX
 
 Application web pour gérer les tâches des opérateurs avec une interface de planning interactive.
 
