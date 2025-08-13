@@ -163,6 +163,13 @@
         </div>
     </div>
 
+    <script>
+        // Configuration pour l'ouverture des tâches dans Odoo
+        window.taskOdooConfig = {
+            urlTemplate: '{{ current_database_url_tache_odoo }}'
+        };
+    </script>
+    
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

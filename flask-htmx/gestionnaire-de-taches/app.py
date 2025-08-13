@@ -19,6 +19,7 @@ app = Flask(__name__)
 CURRENT_DATABASE_CONFIG = DATABASE_CONFIG.copy()
 CURRENT_DATABASE_NAME = ""
 CURRENT_DATABASE_URL_ODOO = ""
+CURRENT_DATABASE_URL_TACHE_ODOO = ""
 CURRENT_PLANNING_ID = None
 
 # Sérialiseur personnalisé pour les dates
@@ -716,7 +717,7 @@ def database_selection():
 @app.route('/select_database/<database_id>')
 def select_database(database_id):
     """Sélectionne une base de données et redirige vers la sélection de planning"""
-    global CURRENT_DATABASE_CONFIG, CURRENT_DATABASE_NAME, CURRENT_DATABASE_URL_ODOO
+    global CURRENT_DATABASE_CONFIG, CURRENT_DATABASE_NAME, CURRENT_DATABASE_URL_ODOO, CURRENT_DATABASE_URL_TACHE_ODOO
     
     # Trouver la configuration de la base de données
     selected_db = next((db for db in DATABASES if db['id'] == database_id), None)
@@ -732,6 +733,7 @@ def select_database(database_id):
     }
     CURRENT_DATABASE_NAME = selected_db['name']
     CURRENT_DATABASE_URL_ODOO = selected_db.get('url_odoo', '')
+    CURRENT_DATABASE_URL_TACHE_ODOO = selected_db.get('url_tache_odoo', '')
     
     try:
         # Tester la connexion à la base
@@ -912,7 +914,8 @@ def planning():
                          start_date=START_DATE,
                          day_duration_hours=DAY_DURATION_HOURS,
                          current_planning_name=current_planning_name,
-                         current_database_url_odoo=CURRENT_DATABASE_URL_ODOO)
+                         current_database_url_odoo=CURRENT_DATABASE_URL_ODOO,
+                         current_database_url_tache_odoo=CURRENT_DATABASE_URL_TACHE_ODOO)
 
 @app.route('/change_database')
 def change_database():

@@ -12,6 +12,9 @@ document.addEventListener('DOMContentLoaded', function() {
     setupEventListeners();
     setupScrollSync();
     setupDragAndDrop();
+    
+    // Initialiser le double-clic sur les tâches
+    setupTaskDoubleClick();
 });
 
 function setupScrollSync() {
@@ -995,3 +998,37 @@ setupEventListeners = function() {
     originalSetupEventListeners();
     setupAffairsReload();
 };
+
+// Gestion du double-clic pour ouvrir les tâches dans Odoo
+function setupTaskDoubleClick() {
+    const urlTacheOdoo = window.taskOdooConfig ? window.taskOdooConfig.urlTemplate : '';
+    
+    if (urlTacheOdoo) {
+        // Ajouter un gestionnaire de double-clic sur toutes les tâches
+        document.querySelectorAll('.task').forEach(function(taskElement) {
+            // Supprimer les anciens gestionnaires pour éviter les doublons
+            taskElement.removeEventListener('dblclick', handleTaskDoubleClick);
+            
+            // Ajouter le nouveau gestionnaire
+            taskElement.addEventListener('dblclick', handleTaskDoubleClick);
+            
+            // Ajouter un curseur pointeur pour indiquer qu'on peut cliquer
+            taskElement.style.cursor = 'pointer';
+            taskElement.title = 'Double-cliquez pour ouvrir dans Odoo';
+        });
+    }
+}
+
+// Gestionnaire de double-clic
+function handleTaskDoubleClick(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const taskId = this.getAttribute('data-task-id');
+    if (taskId && window.taskOdooConfig && window.taskOdooConfig.urlTemplate) {
+        // Remplacer {} par l'ID de la tâche dans l'URL
+        const taskUrl = window.taskOdooConfig.urlTemplate.replace('{}', taskId);
+        // Ouvrir dans un nouvel onglet
+        window.open(taskUrl, '_blank');
+    }
+}
