@@ -134,7 +134,7 @@ def load_operators_from_db(planning_id=None):
             operators = []
             if planning_id:
                 cursor.execute("""
-                    SELECT op.id, he.name
+                    SELECT op.operator_id, he.name
                     FROM is_gestion_tache_operateur op join hr_employee he on op.operator_id=he.id 
                     WHERE planning_id = %s
                     ORDER BY name
@@ -144,7 +144,7 @@ def load_operators_from_db(planning_id=None):
                 
                 for i, row in enumerate(rows):
                     operators.append({
-                        "id": row['id'],
+                        "id": row['operator_id'],
                         "name": row['name'],
                         "absences": []  # Pas d'absences dans un premier temps
                     })

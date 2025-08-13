@@ -50,14 +50,14 @@ class is_gestion_tache_planning(models.Model):
             ]
             operateurs=self.env['hr.employee'].search(domain)
 
-            operator_id=False
+            default_operator_id=False
             for operateur in operateurs:
                 vals={
                     "operator_id"  : operateur.id,
                     "planning_id"    : self.id,
                 }
-                operateur=self.env['is.gestion.tache.operateur'].create(vals)
-                operator_id = operateur.id
+                res=self.env['is.gestion.tache.operateur'].create(vals)
+                default_operator_id = operateur.id
             #******************************************************************
 
             #** Recherche des taches et affaires ******************************
@@ -66,14 +66,17 @@ class is_gestion_tache_planning(models.Model):
                     so.id order_id,
                     so.is_nom_affaire affaire_name,
                     mp.name mp_name,
+                    mp.id production_id,
+                    ot.id ordre_travail_id,
                     ot.name ot_name,
-                    line.id tache_id,
+                    line.id operation_id,
                     line.ordre_id,
                     line.workcenter_id,
                     line.name line_name,
                     line.state,
                     line.reste duration_hours,
-                    line.heure_debut start_date
+                    line.heure_debut start_date,
+                    line.employe_id
                 from is_ordre_travail_line line join is_ordre_travail ot on line.ordre_id=ot.id
                                                 join mrp_production mp on ot.production_id=mp.id
                                                 join sale_order so on mp.is_sale_order_id=so.id
@@ -109,11 +112,16 @@ class is_gestion_tache_planning(models.Model):
                         start_date =  datetime.now()
                     vals={
                         "name"          : "[%s] %s"%(row['mp_name'],row['line_name']),
-                        "operator_id"   : operator_id,
+                        "operator_id"   : row['employe_id'] or default_operator_id,
                         "affaire_id"    : affaire.id,
                         "start_date"    : start_date,
                         "duration_hours": row['duration_hours'],
                         "planning_id"   : self.id,
+
+                        "order_id"   : row['order_id'],
+                        "production_id"   : row['production_id'],
+                        "ordre_travail_id"   : row['ordre_travail_id'],
+                        "operation_id"   : row['operation_id'],
                     }
                     res=self.env['is.gestion.tache'].create(vals)
                 #**************************************************************
@@ -142,18 +150,20 @@ class is_gestion_tache_operateur(models.Model):
     planning_id    = fields.Many2one('is.gestion.tache.planning', string="Planning", ondelete='cascade')
 
 
-
-
-
 class is_gestion_tache(models.Model):
     _name='is.gestion.tache'
     _description='Gestion des tâches dans Odoo avec interface en Flask / HTMX'
     _order='name'
 
     name           = fields.Char("Tache", required=True)
-    operator_id    = fields.Many2one('is.gestion.tache.operateur', string="Opérateur", required=True)
+    operator_id    = fields.Many2one('hr.employee', string="Opérateur", required=True)
     affaire_id     = fields.Many2one('is.gestion.tache.affaire', string="Affaire", required=False)
     start_date     = fields.Datetime(string="Date de début", required=True)
     duration_hours = fields.Float(string="Durée (heures)", required=True)
     planning_id    = fields.Many2one('is.gestion.tache.planning', string="Planning", ondelete='cascade')
+
+    order_id         = fields.Many2one('sale.order', string="Commande")
+    production_id    = fields.Many2one('mrp.production', string="OF")
+    ordre_travail_id = fields.Many2one("is.ordre.travail", "Ordre de travail")
+    operation_id     = fields.Many2one("is.ordre.travail.line", "Opération")
 
