@@ -11,9 +11,20 @@ class is_gestion_tache_planning(models.Model):
     _description='Planning pour la gestion des tâches'
     _order='name'
 
-    name        = fields.Char("Plannig", required=True)
+    name        = fields.Char("Planning", required=True)
     tache_ids   = fields.One2many('is.gestion.tache', 'planning_id', string="Tâches")
     affaire_ids = fields.One2many('is.gestion.tache.affaire', 'planning_id', string="Affaires")
+    type_donnees = fields.Selection([
+        ('operation', 'Opération'),
+        ('of', 'OF'),
+    ], string="Type de données", default='operation')
+    workcenter_id = fields.Many2one('mrp.workcenter', 'Poste de charge')
+
+
+    def action_chargement_taches(self):
+        """Action pour charger les tâches selon le type de données sélectionné"""
+        print(f"Chargement des tâches pour le planning '{self.name}' avec le type de données '{self.type_donnees}'")
+        return True
 
 
 class is_gestion_tache_affaire(models.Model):

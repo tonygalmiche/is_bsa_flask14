@@ -133,10 +133,13 @@ def load_operators_from_db():
             raise Exception("Impossible de se connecter à la base de données PostgreSQL")
         
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                # select emp.id, emp.name, count(*)  
+                # from hr_employee emp join is_gestion_tache ta on ta.operator_id=emp.id 
+                # group by emp.id, emp.name
+                # order by emp.name
             cursor.execute("""
-                select emp.id, emp.name, count(*)  
-                from hr_employee emp join is_gestion_tache ta on ta.operator_id=emp.id 
-                group by emp.id, emp.name
+                select emp.id, emp.name
+                from hr_employee emp 
                 order by emp.name
             """)
             rows = cursor.fetchall()
@@ -884,23 +887,18 @@ def planning():
         display_task["duration"] = get_task_duration_slots(task)
         display_tasks.append(display_task)
     
-    # Filtrer les opérateurs qui ont au moins une tâche affichée
-    operators_with_tasks = set()
-    for task in display_tasks:
-        operators_with_tasks.add(task['operator_id'])
+    # Utiliser tous les opérateurs au lieu de filtrer par ceux qui ont des tâches
+    # filtered_operators = [op for op in OPERATORS if op['id'] in operators_with_tasks]
     
-    # Garder seulement les opérateurs qui ont des tâches, dans l'ordre de la requête SQL (alphabétique)
-    filtered_operators = [op for op in OPERATORS if op['id'] in operators_with_tasks]
-    
-    # Pré-calculer les informations d'absence pour chaque opérateur filtré et slot
+    # Pré-calculer les informations d'absence pour tous les opérateurs et slots
     operator_absences = {}
-    for operator in filtered_operators:
+    for operator in OPERATORS:
         operator_absences[operator["id"]] = {}
         for i in range(NUM_SLOTS):
             operator_absences[operator["id"]][i] = is_absence_slot(operator["id"], i)
     
     return render_template('index.html', 
-                         operators=filtered_operators,  # Utiliser la liste filtrée
+                         operators=OPERATORS,  # Utiliser tous les opérateurs
                          time_slots=time_slots,
                          months=months,
                          weeks=weeks,
@@ -1208,17 +1206,17 @@ def get_planning_data():
         display_task["duration"] = duration_slots
         display_tasks.append(display_task)
     
-    # Filtrer les opérateurs qui ont au moins une tâche (même logique que dans index())
-    operators_with_tasks = set()
-    for task in display_tasks:
-        operators_with_tasks.add(task['operator_id'])
-    
-    # Garder seulement les opérateurs qui ont des tâches, dans l'ordre de la requête SQL
-    filtered_operators = [op for op in OPERATORS if op['id'] in operators_with_tasks]
+    # Utiliser tous les opérateurs au lieu de filtrer par ceux qui ont des tâches
+    # operators_with_tasks = set()
+    # for task in display_tasks:
+    #     operators_with_tasks.add(task['operator_id'])
+    # 
+    # # Garder seulement les opérateurs qui ont des tâches, dans l'ordre de la requête SQL
+    # filtered_operators = [op for op in OPERATORS if op['id'] in operators_with_tasks]
     
     return jsonify({
         "tasks": display_tasks,
-        "operators": filtered_operators,  # Utiliser la liste filtrée ici aussi
+        "operators": OPERATORS,  # Utiliser tous les opérateurs
         "affairs": AFFAIRES
     })
 

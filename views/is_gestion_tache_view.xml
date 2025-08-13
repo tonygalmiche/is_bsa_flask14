@@ -12,9 +12,29 @@
                 <form>  
                     <sheet>
                         <group>
-                            <field name="name"/> 
+                            <group>
+                                <field name="name"/> 
+                            </group>
+                            <group>
+                                <field name="type_donnees"/>
+                                <field name="workcenter_id" attrs="{'invisible':[('type_donnees','!=','operation')]}"/>
+                                <div>
+                                    <button name="action_chargement_taches" 
+                                            type="object" 
+                                            string="Chargement des tâches" 
+                                    />
+                                </div>
+                            </group>
                         </group>
                         <notebook>
+                            <page string="Affaires">
+                                <field name="affaire_ids">
+                                    <tree>
+                                        <field name="name"/>
+                                        <field name="color" widget="color"/>
+                                    </tree>
+                                </field>
+                            </page>
                             <page string="Tâches">
                                 <field name="tache_ids">
                                     <tree>
@@ -23,14 +43,6 @@
                                         <field name="affaire"/>
                                         <field name="start_date"/>
                                         <field name="duration_hours"/>
-                                    </tree>
-                                </field>
-                            </page>
-                            <page string="Affaires">
-                                <field name="affaire_ids">
-                                    <tree>
-                                        <field name="name"/>
-                                        <field name="color" widget="color"/>
                                     </tree>
                                 </field>
                             </page>
