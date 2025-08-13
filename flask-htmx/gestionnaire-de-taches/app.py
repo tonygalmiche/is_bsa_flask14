@@ -125,7 +125,7 @@ def load_affaires_from_db(planning_id=None):
     except Exception as e:
         raise Exception(f"Erreur lors du chargement des affaires depuis la base de données: {str(e)}")
 
-def load_operators_from_db():
+def load_operators_from_db(planning_id=None):
     """Charge les opérateurs depuis la base PostgreSQL"""
     try:
         conn = get_db_connection()
@@ -137,22 +137,34 @@ def load_operators_from_db():
                 # from hr_employee emp join is_gestion_tache ta on ta.operator_id=emp.id 
                 # group by emp.id, emp.name
                 # order by emp.name
-            cursor.execute("""
-                select emp.id, emp.name
-                from hr_employee emp 
-                order by emp.name
-            """)
-            rows = cursor.fetchall()
+            # cursor.execute("""
+            #     select emp.id, emp.name
+            #     from hr_employee emp 
+            #     order by emp.name
+            # """)
+
             operators = []
-            
-            for i, row in enumerate(rows):
-                operators.append({
-                    "id": row['id'],
-                    "name": row['name'],
-                    "absences": []  # Pas d'absences dans un premier temps
-                })
-            
-            conn.close()
+            if planning_id:
+                cursor.execute("""
+                    SELECT op.id, he.name
+                    FROM is_gestion_tache_operateur op join hr_employee he on op.operator_id=he.id 
+                    WHERE planning_id = %s
+                    ORDER BY name
+                """, (planning_id,))
+
+
+
+                rows = cursor.fetchall()
+                operators = []
+                
+                for i, row in enumerate(rows):
+                    operators.append({
+                        "id": row['id'],
+                        "name": row['name'],
+                        "absences": []  # Pas d'absences dans un premier temps
+                    })
+                
+                conn.close()
             return operators
             
     except Exception as e:
@@ -782,7 +794,7 @@ def select_planning(planning_id):
         # Charger les données filtrées par planning
         AFFAIRES = load_affaires_from_db(planning_id)
         TASKS = load_tasks_from_db(planning_id)
-        OPERATORS = load_operators_from_db()
+        OPERATORS = load_operators_from_db(planning_id)
         
         # Rediriger vers le planning
         return redirect(url_for('planning'))
@@ -1258,7 +1270,7 @@ def reload_data():
     global OPERATORS, AFFAIRES, TASKS
     try:
         # Recharger les opérateurs
-        new_operators = load_operators_from_db()
+        new_operators = load_operators_from_db(CURRENT_PLANNING_ID)
         operators_count = len(new_operators)
         
         # Recharger les affaires (filtrées par planning si applicable)
@@ -1311,7 +1323,7 @@ def reload_operators():
     """Recharge les opérateurs depuis la base de données"""
     global OPERATORS
     try:
-        OPERATORS = load_operators_from_db()
+        OPERATORS = load_operators_from_db(CURRENT_PLANNING_ID)
         return jsonify({
             "success": True, 
             "message": f"{len(OPERATORS)} opérateurs rechargés",

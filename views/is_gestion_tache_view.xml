@@ -27,14 +27,7 @@
                             </group>
                         </group>
                         <notebook>
-                            <page string="Affaires">
-                                <field name="affaire_ids">
-                                    <tree>
-                                        <field name="name"/>
-                                        <field name="color" widget="color"/>
-                                    </tree>
-                                </field>
-                            </page>
+
                             <page string="Tâches">
                                 <field name="tache_ids">
                                     <tree>
@@ -43,6 +36,23 @@
                                         <field name="affaire"/>
                                         <field name="start_date"/>
                                         <field name="duration_hours"/>
+                                    </tree>
+                                </field>
+                            </page>
+
+
+                            <page string="Affaires">
+                                <field name="affaire_ids">
+                                    <tree>
+                                        <field name="name"/>
+                                        <field name="color" widget="color"/>
+                                    </tree>
+                                </field>
+                            </page>
+                            <page string="Opérateurs">
+                                <field name="operateur_ids">
+                                    <tree>
+                                        <field name="operator_id"/>
                                     </tree>
                                 </field>
                             </page>
