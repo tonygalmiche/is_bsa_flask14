@@ -38,7 +38,8 @@ HEADER_HEIGHT = 80  # Hauteur de l'en-tête
 NUM_SLOTS = 90  # Nombre total de créneaux (triplé : 30 -> 90)
 
 # Nouveaux paramètres
-START_DATE = datetime.now().date()  # Date de début du planning (date du jour par défaut)
+#START_DATE =  (datetime.now() - timedelta(days=30)).date() # datetime.now().date()  # Date de début du planning (date du jour par défaut)
+START_DATE =  datetime.now().date()  # Date de début du planning (date du jour par défaut)
 DAY_DURATION_HOURS = 7  # Durée d'une journée en heures
 HALF_DAY_HOURS = DAY_DURATION_HOURS / 2  # Durée d'une demi-journée (AM ou PM)
 
@@ -95,6 +96,7 @@ def load_affaires_from_db(planning_id=None):
             raise Exception("Impossible de se connecter à la base de données PostgreSQL")
         
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            affaires = []
             if planning_id:
                 cursor.execute("""
                     SELECT id, name, color 
@@ -102,23 +104,18 @@ def load_affaires_from_db(planning_id=None):
                     WHERE planning_id = %s
                     ORDER BY name
                 """, (planning_id,))
-            else:
-                cursor.execute("""
-                    SELECT id, name, color 
-                    FROM is_gestion_tache_affaire 
-                    ORDER BY name
-                """)
+           
             
-            rows = cursor.fetchall()
-            affaires = []
-            
-            for i, row in enumerate(rows):
-                affaires.append({
-                    "id": row['id'],
-                    "name": row['name'],
-                    "color": row['color'] if row['color'] else "#808080"  # Couleur par défaut si NULL
-                })
-            
+                rows = cursor.fetchall()
+                
+                for i, row in enumerate(rows):
+                    print(i,row)
+                    affaires.append({
+                        "id": row['id'],
+                        "name": row['name'],
+                        "color": row['color'] if row['color'] else "#808080"  # Couleur par défaut si NULL
+                    })
+                
             conn.close()
             return affaires
             
@@ -133,15 +130,7 @@ def load_operators_from_db(planning_id=None):
             raise Exception("Impossible de se connecter à la base de données PostgreSQL")
         
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                # select emp.id, emp.name, count(*)  
-                # from hr_employee emp join is_gestion_tache ta on ta.operator_id=emp.id 
-                # group by emp.id, emp.name
-                # order by emp.name
-            # cursor.execute("""
-            #     select emp.id, emp.name
-            #     from hr_employee emp 
-            #     order by emp.name
-            # """)
+          
 
             operators = []
             if planning_id:
@@ -151,13 +140,12 @@ def load_operators_from_db(planning_id=None):
                     WHERE planning_id = %s
                     ORDER BY name
                 """, (planning_id,))
-
-
-
                 rows = cursor.fetchall()
                 operators = []
                 
                 for i, row in enumerate(rows):
+                    print('operator',i,row)
+
                     operators.append({
                         "id": row['id'],
                         "name": row['name'],
@@ -180,61 +168,56 @@ def load_tasks_from_db(planning_id=None):
         # Définir les fuseaux horaires
         utc_tz = pytz.UTC
         paris_tz = pytz.timezone('Europe/Paris')
-        
+
+        tasks = []
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             if planning_id:
                 cursor.execute("""
-                    SELECT id, name, operator_id, affaire as affaire_id, start_date, duration_hours
+                    SELECT id, name, operator_id, affaire_id, start_date, duration_hours
                     FROM is_gestion_tache 
                     WHERE planning_id = %s
                     ORDER BY start_date, operator_id
                 """, (planning_id,))
-            else:
-                cursor.execute("""
-                    SELECT id, name, operator_id, affaire as affaire_id, start_date, duration_hours
-                    FROM is_gestion_tache 
-                    ORDER BY start_date, operator_id
-                """)
-            
-            rows = cursor.fetchall()
-            tasks = []
-            
-            for i, row in enumerate(rows):
-                # Convertir l'heure UTC en heure de Paris
-                start_date_utc = row['start_date']
-                if start_date_utc.tzinfo is None:
-                    # Si pas de timezone, on assume que c'est UTC
-                    start_date_utc = utc_tz.localize(start_date_utc)
-                elif start_date_utc.tzinfo != utc_tz:
-                    # Convertir vers UTC si ce n'est pas déjà le cas
-                    start_date_utc = start_date_utc.astimezone(utc_tz)
-                
-                # Convertir vers l'heure de Paris
-                start_date_paris = start_date_utc.astimezone(paris_tz)
-                
-                # Déterminer le slot selon la logique : avant 12H = AM, après 12H = PM
-                paris_hour = start_date_paris.hour
-                if paris_hour < 12:
-                    # Slot AM (8H)
-                    adjusted_start_date = start_date_paris.replace(hour=8, minute=0, second=0, microsecond=0)
-                else:
-                    # Slot PM (14H)
-                    adjusted_start_date = start_date_paris.replace(hour=14, minute=0, second=0, microsecond=0)
-                
-                # Convertir en datetime naïf (sans timezone) pour compatibilité avec le reste du code
-                adjusted_start_date = adjusted_start_date.replace(tzinfo=None)
-                
-                # Convertir les données de la base vers le format attendu par l'application
-                task = {
-                    "id": str(row['id']),  # Convertir en string pour compatibilité
-                    "operator_id": row['operator_id'],
-                    "affaire_id": row['affaire_id'],
-                    "start_date": adjusted_start_date,  # Utiliser la date ajustée
-                    "duration_hours": float(row['duration_hours']),  # S'assurer que c'est un float
-                    "name": row['name']
-                }
-                
-                tasks.append(task)
+                rows = cursor.fetchall()
+                for i, row in enumerate(rows):
+
+                    print(i,row)
+
+                    # Convertir l'heure UTC en heure de Paris
+                    start_date_utc = row['start_date']
+                    if start_date_utc.tzinfo is None:
+                        # Si pas de timezone, on assume que c'est UTC
+                        start_date_utc = utc_tz.localize(start_date_utc)
+                    elif start_date_utc.tzinfo != utc_tz:
+                        # Convertir vers UTC si ce n'est pas déjà le cas
+                        start_date_utc = start_date_utc.astimezone(utc_tz)
+                    
+                    # Convertir vers l'heure de Paris
+                    start_date_paris = start_date_utc.astimezone(paris_tz)
+                    
+                    # Déterminer le slot selon la logique : avant 12H = AM, après 12H = PM
+                    paris_hour = start_date_paris.hour
+                    if paris_hour < 12:
+                        # Slot AM (8H)
+                        adjusted_start_date = start_date_paris.replace(hour=8, minute=0, second=0, microsecond=0)
+                    else:
+                        # Slot PM (14H)
+                        adjusted_start_date = start_date_paris.replace(hour=14, minute=0, second=0, microsecond=0)
+                    
+                    # Convertir en datetime naïf (sans timezone) pour compatibilité avec le reste du code
+                    adjusted_start_date = adjusted_start_date.replace(tzinfo=None)
+                    
+                    # Convertir les données de la base vers le format attendu par l'application
+                    task = {
+                        "id": str(row['id']),  # Convertir en string pour compatibilité
+                        "operator_id": row['operator_id'],
+                        "affaire_id": row['affaire_id'],
+                        "start_date": adjusted_start_date,  # Utiliser la date ajustée
+                        "duration_hours": float(row['duration_hours']),  # S'assurer que c'est un float
+                        "name": row['name']
+                    }
+                    
+                    tasks.append(task)
             
             conn.close()
             return tasks
