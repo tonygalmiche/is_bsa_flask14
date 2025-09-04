@@ -86,12 +86,14 @@ class is_gestion_tache_planning(models.Model):
                     and mp.state not in  ('cancer','done')
                     and line.workcenter_id=%s
                     and mp.is_pret='oui'
+                    -- and mp.is_sale_order_id=756
                 -- limit 20;
             """
             cr.execute(SQL,[self.workcenter_id.id])
             rows = cr.dictfetchall()   
             orders={}       
             for row in rows:
+
                 #** Ajout de l'affaire ****************************************
                 if row['order_id'] not in orders:
                     color = generer_couleur_foncee()
@@ -107,6 +109,7 @@ class is_gestion_tache_planning(models.Model):
                 #**************************************************************
 
                 #** Ajout de la tache *****************************************
+                if affaire:
                     start_date = row['start_date']
                     if start_date< datetime.now():
                         start_date =  datetime.now()
