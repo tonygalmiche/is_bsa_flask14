@@ -42,6 +42,26 @@ class is_gestion_tache_planning(models.Model):
             rec.tache_count = len(rec.tache_ids)
 
 
+    def _update_operation_employees_from_tasks(self, tasks):
+        """Met à jour le champ employe_id sur les lignes d'OT (is.ordre.travail.line)
+        à partir des tâches fournies (operator_id).
+
+        Retourne le nombre de lignes mises à jour.
+        """
+        updated_lines = 0
+        for t in tasks:
+            line = t.operation_id
+            emp = t.operator_id
+            if line and emp and line.employe_id.id != emp.id:
+                try:
+                    line.write({'employe_id': emp.id})
+                    updated_lines += 1
+                except Exception:
+                    # Ignorer les erreurs pour ne pas bloquer l'action globale
+                    continue
+        return updated_lines
+
+
     def action_chargement_taches(self):
         """Action pour charger les tâches selon le type de données sélectionné"""
         cr=self._cr
@@ -360,13 +380,16 @@ class is_gestion_tache_planning(models.Model):
                 # Ignorer silencieusement les erreurs d'accès/écriture pour ne pas bloquer l'action
                 continue
 
+        # Mettre à jour l'employé des opérations depuis les tâches (si présent)
+        updated_lines = self._update_operation_employees_from_tasks(tasks)
+
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',
             'params': {
                 'title': 'Mise à jour date OF',
-                'message': f"{updated} OF mis à jour.",
-                'type': 'success' if updated else 'warning',
+                'message': f"{updated} OF mis à jour, {updated_lines} opérations affectées.",
+                'type': 'success' if (updated or updated_lines) else 'warning',
                 'sticky': False,
             }
         }
@@ -458,13 +481,16 @@ class is_gestion_tache_planning(models.Model):
                     duree_precedente = duree_relle
                     mem_tps_apres = tache.tps_apres
 
+        # Mettre à jour l'employé sur les opérations liées aux tâches
+        updated_lines = self._update_operation_employees_from_tasks(tasks)
+
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',
             'params': {
                 'title': 'Mise à jour opérations',
-                'message': f"{updated_ops} opérations recalculées.",
-                'type': 'success' if updated_ops else 'warning',
+                'message': f"{updated_ops} opérations recalculées, {updated_lines} employés affectés.",
+                'type': 'success' if (updated_ops or updated_lines) else 'warning',
                 'sticky': False,
             }
         }
