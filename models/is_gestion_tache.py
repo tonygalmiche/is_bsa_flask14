@@ -341,56 +341,52 @@ class is_gestion_tache_planning(models.Model):
 
 
     def action_maj_date_of(self):
-        """Met à jour mrp.production.is_date_planifiee depuis les start_date des tâches du planning.
-        Pour chaque OF lié, utilise la date de début la plus tôt.
+        """Pour chaque OF présent dans ce planning, met à jour mrp.production.date_planned_start
+        avec la start_date la plus récente parmi toutes les tâches is.gestion.tache liées à cet OF.
+        Les autres tâches ne sont pas traitées.
         """
-        self.ensure_one()
-        tasks = self.tache_ids.filtered(lambda t: t.production_id and t.start_date)
-        if not tasks:
-            return {
-                'type': 'ir.actions.client',
-                'tag': 'display_notification',
-                'params': {
-                    'title': 'Mise à jour date OF',
-                    'message': "Aucune tâche avec OF et date de début.",
-                    'type': 'warning',
-                    'sticky': False,
-                }
-            }
+        
+        productions={}
+        for task in self.tache_ids:
+            if task.start_date:
+                if task.production_id not in productions:
+                    productions[task.production_id]=task
+                if productions[task.production_id].start_date>task.start_date:
+                    productions[task.production_id]=task
+            
+        
+        for production in productions:
 
-        # Plus tôt par OF
-        min_dates = {}
-        for t in tasks:
-            pid = t.production_id.id
-            sd = t.start_date
-            if pid not in min_dates or sd < min_dates[pid]:
-                min_dates[pid] = sd
+            #delta = heure_debut_operation_modifiee - heure_debut_operation_actuelle
 
-        # Adapter si le champ cible est de type Date
-        field_def = self.env['mrp.production']._fields.get('is_date_planifiee')
-        is_date_field = bool(field_def and getattr(field_def, 'type', None) == 'date')
 
-        updated = 0
-        for pid, dt in min_dates.items():
-            prod = self.env['mrp.production'].browse(pid)
-            value = dt.date() if is_date_field and hasattr(dt, 'date') else dt
-            try:
-                prod.write({'date_planned_start': value})
-                updated += 1
-            except Exception:
-                # Ignorer silencieusement les erreurs d'accès/écriture pour ne pas bloquer l'action
-                continue
 
-        # Mettre à jour l'employé des opérations depuis les tâches (si présent)
+            #Delta entre l'heure de début de l'opération concernée et l'heure de début de l'OF
+            heure_debut_operation_actuelle = productions[production].operation_id.heure_debut
+            date_planned_start_of_actuelle =  production.date_planned_start
+            delta = heure_debut_operation_actuelle - date_planned_start_of_actuelle
+
+            #La nouvelle heure de début de l'OF est égale à la nouvelle heure de l'opération moins ce delta
+            heure_debut_operation_modifiee = productions[production].start_date
+            date_planned_start_new = heure_debut_operation_modifiee - delta
+
+            #print(production, date_planned_start_of_actuelle, heure_debut_operation_actuelle,delta)
+            production.date_planned_start = date_planned_start_new
+        
+      
+        # Mettre à jour l'employé sur les opérations liées aux tâches
+        tasks = self.tache_ids.filtered(lambda t: t.operation_id and t.start_date)
         updated_lines = self._update_operation_employees_from_tasks(tasks)
 
+
+        nb = len(productions)
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',
             'params': {
                 'title': 'Mise à jour date OF',
-                'message': f"{updated} OF mis à jour, {updated_lines} opérations affectées.",
-                'type': 'success' if (updated or updated_lines) else 'warning',
+                'message': f"{nb} OF mis à jour.",
+                'type': 'success' if nb else 'warning',
                 'sticky': False,
             }
         }
