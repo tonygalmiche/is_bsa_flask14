@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import uuid
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -309,18 +309,113 @@ def update_multiple_tasks_in_database(tasks_data):
         return False
 
 # Dates de congés (orange clair) - format datetime
-VACATION_DATES = [
-    datetime(2025, 8, 15, 8, 0),   # 15 août AM
-    datetime(2025, 8, 15, 14, 0),  # 15 août PM
-    datetime(2025, 8, 25, 8, 0),   # 25 août AM
-    datetime(2025, 8, 25, 14, 0),  # 25 août PM
-]
+# VACATION_DATES = [
+#     datetime(2025, 8, 15, 8, 0),   # 15 août AM
+#     datetime(2025, 8, 15, 14, 0),  # 15 août PM
+#     datetime(2025, 8, 25, 8, 0),   # 25 août AM
+#     datetime(2025, 8, 25, 14, 0),  # 25 août PM
+# ]
+VACATION_DATES = []
 
 # Chargement dynamique des opérateurs depuis la base de données
 # Les données seront chargées lors de la sélection de la base de données
 OPERATORS = []
 AFFAIRES = []
 TASKS = []
+
+# Utilitaire: générer les datetimes AM/PM pour une date (naïf, heure locale affichage)
+def _halfday_datetimes(d: date):
+    return [
+        datetime(d.year, d.month, d.day, 8, 0, 0),
+        datetime(d.year, d.month, d.day, 14, 0, 0),
+    ]
+
+def load_fermetures_from_db(planning_id=None):
+    """Charge les fermetures (is_gestion_tache_fermeture) et met à jour:
+    - VACATION_DATES: jours fermés globalement (tous les opérateurs ou enregistrements sans opérateur)
+    - OPERATORS[i]['absences']: demi-journées d'absence pour chaque opérateur
+    """
+    global VACATION_DATES, OPERATORS
+    VACATION_DATES = []
+    if not planning_id:
+        return
+
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                SELECT date_fermeture, operator_id
+                FROM is_gestion_tache_fermeture
+                WHERE planning_id = %s
+                """,
+                (planning_id,),
+            )
+            rows = cursor.fetchall()
+
+        conn.close()
+
+        if not rows:
+            return
+
+        # Indexer opérateurs pour set absences
+        operator_ids = [op['id'] for op in OPERATORS] if OPERATORS else []
+        operator_set = set(operator_ids)
+        # Préparer map opérateur -> set(date)
+        absences_by_operator = {op_id: set() for op_id in operator_ids}
+        # Map date -> opérateurs ayant fermeture ce jour
+        operators_by_date = {}
+
+        for r in rows:
+            d = r['date_fermeture']
+            op_id = r.get('operator_id')
+            # Normaliser d en type date
+            if isinstance(d, datetime):
+                d = d.date()
+            if not isinstance(d, date):
+                continue
+
+            # Indexer par date les opérateurs concernés
+            operators_by_date.setdefault(d, set())
+            if op_id is None:
+                # Enregistrement sans opérateur => fermeture globale ce jour
+                # On marque tous les opérateurs comme absents et on tag en congé global
+                if operator_ids:
+                    for oid in operator_ids:
+                        absences_by_operator.setdefault(oid, set()).add(d)
+                # Tag global (sera transformé en AM/PM ci-dessous)
+                operators_by_date[d] = set(operator_ids) if operator_ids else {None}
+            else:
+                operators_by_date[d].add(op_id)
+                if op_id in absences_by_operator:
+                    absences_by_operator[op_id].add(d)
+
+        # Renseigner absences sur OPERATORS en AM/PM
+        for op in OPERATORS:
+            dates_for_op = absences_by_operator.get(op['id'], set())
+            abs_halfdays = []
+            for day in sorted(dates_for_op):
+                abs_halfdays.extend(_halfday_datetimes(day))
+            op['absences'] = abs_halfdays
+
+        # Calcul des jours de congé global: jours couverts pour tous les opérateurs
+        global_vacation_dates = []
+        for d, ops in operators_by_date.items():
+            if not operator_set:
+                # S'il n'y a pas d'opérateurs chargés, considérer les jours sans opérateur comme globaux
+                if ops == {None}:
+                    global_vacation_dates.extend(_halfday_datetimes(d))
+            else:
+                if ops.issuperset(operator_set):
+                    global_vacation_dates.extend(_halfday_datetimes(d))
+
+        VACATION_DATES = global_vacation_dates
+
+    except Exception:
+        # En cas d'erreur, ne rien bloquer: garder listes vides
+        VACATION_DATES = []
 
 def date_to_slot(task_date):
     """Convertit une date/datetime en numéro de slot"""
@@ -773,6 +868,8 @@ def select_planning(planning_id):
         AFFAIRES = load_affaires_from_db(planning_id)
         TASKS = load_tasks_from_db(planning_id)
         OPERATORS = load_operators_from_db(planning_id)
+        # Charger les fermetures (met à jour VACATION_DATES et les absences opérateurs)
+        load_fermetures_from_db(planning_id)
         
         # Rediriger vers le planning
         return redirect(url_for('planning'))
@@ -1263,6 +1360,8 @@ def reload_data():
         OPERATORS = new_operators
         AFFAIRES = new_affaires
         TASKS = new_tasks
+        # Recharger les fermetures après avoir défini OPERATORS
+        load_fermetures_from_db(CURRENT_PLANNING_ID)
         
         message = f"{operators_count} opérateurs, {affaires_count} affaires et {tasks_count} tâches rechargés"
         
@@ -1302,6 +1401,8 @@ def reload_operators():
     global OPERATORS
     try:
         OPERATORS = load_operators_from_db(CURRENT_PLANNING_ID)
+        # Recharger les fermetures dépendantes des opérateurs
+        load_fermetures_from_db(CURRENT_PLANNING_ID)
         return jsonify({
             "success": True, 
             "message": f"{len(OPERATORS)} opérateurs rechargés",

@@ -144,9 +144,11 @@ class is_gestion_tache_planning(models.Model):
         Règles:
         - On cible les opérateurs du planning (onglet Opérateurs). Si absent, on prend
           les employés du poste de charge sélectionné.
-        - On supprime d'abord les fermetures existantes du planning puis on recrée
-          une ligne par jour et par opérateur pour chaque absence.
-        - L'intitulé reprend le motif d'absence et le commentaire éventuel.
+                - On supprime d'abord les fermetures existantes du planning puis on recrée
+                    une ligne par jour et par opérateur pour chaque absence et pour chaque
+                    fermeture issue des calendriers (resource.calendar.leaves) des employés.
+                - L'intitulé reprend le motif d'absence et le commentaire éventuel pour is.absence,
+                    et le nom de la fermeture de calendrier pour resource.calendar.leaves.
         """
         for planning in self:
             # Supprimer les fermetures existantes de ce planning
@@ -162,12 +164,14 @@ class is_gestion_tache_planning(models.Model):
             if not employee_ids:
                 continue
 
-            # Récupérer toutes les absences des employés cibles
+            vals_list = []
+            # Set pour éviter les doublons (opérateur, jour)
+            fermeture_keys = set()
+
+            # 1) Récupérer toutes les absences (is.absence) des employés cibles
             absences = self.env['is.absence'].search([
                 ('employe_id', 'in', employee_ids.ids),
             ])
-
-            vals_list = []
             for absn in absences:
                 # Déterminer la plage de dates (par jour) couverte par l'absence
                 start_dt = absn.date_debut
@@ -185,13 +189,63 @@ class is_gestion_tache_planning(models.Model):
                     intitule = f"{intitule} - {absn.commentaire}"
 
                 while cur_day <= last_day:
-                    vals_list.append({
-                        'planning_id': planning.id,
-                        'operator_id': absn.employe_id.id,
-                        'date_fermeture': cur_day,
-                        'intitule': intitule,
-                    })
+                    key = (absn.employe_id.id, cur_day)
+                    if key not in fermeture_keys:
+                        vals_list.append({
+                            'planning_id': planning.id,
+                            'operator_id': absn.employe_id.id,
+                            'date_fermeture': cur_day,
+                            'intitule': intitule,
+                        })
+                        fermeture_keys.add(key)
                     cur_day = cur_day + timedelta(days=1)
+
+            # 2) Récupérer les fermetures issues des calendriers (resource.calendar.leaves)
+            # Associer chaque employé à son calendrier
+            employees_by_calendar = {}
+            calendar_ids = set()
+            for emp in employee_ids:
+                cal = emp.resource_calendar_id
+                if cal:
+                    employees_by_calendar.setdefault(cal.id, []).append(emp)
+                    calendar_ids.add(cal.id)
+
+            if calendar_ids:
+                # Chercher toutes les fermetures pour ces calendriers
+                calendar_leaves = self.env['resource.calendar.leaves'].search([
+                    ('calendar_id', 'in', list(calendar_ids)),
+                ])
+
+                for leave in calendar_leaves:
+                    start_dt = leave.date_from
+                    end_dt = leave.date_to
+                    if not start_dt or not end_dt or start_dt >= end_dt:
+                        continue
+
+                    # Fin exclusive => soustraire 1 seconde pour inclure le dernier jour
+                    last_day = (end_dt - timedelta(seconds=1)).date()
+                    cur_day = start_dt.date()
+
+                    # Intitulé depuis le calendrier
+                    intitule = leave.name or 'Fermeture calendrier'
+
+                    # Pour tous les employés rattachés à ce calendrier
+                    emps = employees_by_calendar.get(leave.calendar_id.id, [])
+                    if not emps:
+                        continue
+
+                    while cur_day <= last_day:
+                        for emp in emps:
+                            key = (emp.id, cur_day)
+                            if key not in fermeture_keys:
+                                vals_list.append({
+                                    'planning_id': planning.id,
+                                    'operator_id': emp.id,
+                                    'date_fermeture': cur_day,
+                                    'intitule': intitule,
+                                })
+                                fermeture_keys.add(key)
+                        cur_day = cur_day + timedelta(days=1)
 
             if vals_list:
                 self.env['is.gestion.tache.fermeture'].create(vals_list)
