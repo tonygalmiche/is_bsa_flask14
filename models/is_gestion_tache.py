@@ -72,6 +72,8 @@ class is_gestion_tache_planning(models.Model):
                     so.id order_id,
                     so.is_nom_affaire affaire_name,
                     mp.name mp_name,
+                    pt.name product_name,
+                    pp.id product_id,
                     mp.id production_id,
                     ot.id ordre_travail_id,
                     ot.name ot_name,
@@ -86,6 +88,8 @@ class is_gestion_tache_planning(models.Model):
                 from is_ordre_travail_line line join is_ordre_travail ot on line.ordre_id=ot.id
                                                 join mrp_production mp on ot.production_id=mp.id
                                                 join sale_order so on mp.is_sale_order_id=so.id
+                                                join product_product pp on mp.product_id=pp.id
+                                                join product_template pt on pp.product_tmpl_id=pt.id
 
                 where line.state not in ('annule','termine')
                     and ot.state!='termine'
@@ -119,14 +123,17 @@ class is_gestion_tache_planning(models.Model):
                     start_date = row['start_date']
                     if start_date< datetime.now():
                         start_date =  datetime.now()
+
+                    product = self.env['product.product'].search([('id','=',row['product_id'])])[0]
+                    variant = product.product_template_attribute_value_ids._get_combination_name()
+                    name = "[%s] %s" % (variant, row.get('product_name'))
                     vals={
-                        "name"          : "[%s] %s"%(row['mp_name'],row['line_name']),
+                        "name"          : name,
                         "operator_id"   : row['employe_id'] or default_operator_id,
                         "affaire_id"    : affaire.id,
                         "start_date"    : start_date,
                         "duration_hours": row['duration_hours'],
                         "planning_id"   : self.id,
-
                         "order_id"   : row['order_id'],
                         "production_id"   : row['production_id'],
                         "ordre_travail_id"   : row['ordre_travail_id'],
@@ -267,6 +274,21 @@ class is_gestion_tache_planning(models.Model):
         }
 
 
+    def action_open_productions(self):
+        """Ouvre la liste des OF (mrp.production) référencés dans les tâches du planning."""
+        self.ensure_one()
+        prod_ids = self.tache_ids.mapped('production_id').ids
+        domain = [('id', 'in', prod_ids)] if prod_ids else [('id', '=', 0)]
+        return {
+            'name': 'Ordres de fabrication liés',
+            'type': 'ir.actions.act_window',
+            'res_model': 'mrp.production',
+            'view_mode': 'tree,form',
+            'domain': domain,
+            'target': 'current',
+        }
+
+
     def action_open_fermetures(self):
         """Ouvre la liste des fermetures rattachées à ce planning."""
         self.ensure_one()
@@ -278,6 +300,59 @@ class is_gestion_tache_planning(models.Model):
             'domain': [('planning_id', '=', self.id)],
             'context': {'default_planning_id': self.id},
             'target': 'current',
+        }
+
+
+    def action_maj_is_date_planifiee(self):
+        """Met à jour mrp.production.is_date_planifiee depuis les start_date des tâches du planning.
+        Pour chaque OF lié, utilise la date de début la plus tôt.
+        """
+        self.ensure_one()
+        tasks = self.tache_ids.filtered(lambda t: t.production_id and t.start_date)
+        if not tasks:
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': 'Mise à jour date OF',
+                    'message': "Aucune tâche avec OF et date de début.",
+                    'type': 'warning',
+                    'sticky': False,
+                }
+            }
+
+        # Plus tôt par OF
+        min_dates = {}
+        for t in tasks:
+            pid = t.production_id.id
+            sd = t.start_date
+            if pid not in min_dates or sd < min_dates[pid]:
+                min_dates[pid] = sd
+
+        # Adapter si le champ cible est de type Date
+        field_def = self.env['mrp.production']._fields.get('is_date_planifiee')
+        is_date_field = bool(field_def and getattr(field_def, 'type', None) == 'date')
+
+        updated = 0
+        for pid, dt in min_dates.items():
+            prod = self.env['mrp.production'].browse(pid)
+            value = dt.date() if is_date_field and hasattr(dt, 'date') else dt
+            try:
+                prod.write({'date_planned_start': value})
+                updated += 1
+            except Exception:
+                # Ignorer silencieusement les erreurs d'accès/écriture pour ne pas bloquer l'action
+                continue
+
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': 'Mise à jour date OF',
+                'message': f"{updated} OF mis à jour.",
+                'type': 'success' if updated else 'warning',
+                'sticky': False,
+            }
         }
 
 

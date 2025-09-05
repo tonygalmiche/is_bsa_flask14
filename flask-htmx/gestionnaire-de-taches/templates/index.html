@@ -117,8 +117,9 @@
                                      data-start-slot="{{ task.start_slot }}"
                                      data-duration="{{ task.duration }}"
                                      data-affair-id="{{ task.affaire_id }}"
-                                     data-title="{{ task.name }}"
-                                     data-affair-name="{{ affair.name }}"
+                                     data-title="{{ task.name | e }}"
+                                     data-operation-name="{{ task.operation_name | e }}"
+                                     data-affair-name="{{ affair.name | e }}"
                                      style="background-color: {{ affair.color }}; 
                                             left: calc({{ task.start_slot }} * var(--slot-width)); 
                                             width: calc({{ task.duration }} * var(--slot-width) - 2px);"
@@ -131,6 +132,9 @@
                                     
                                     <div class="task-content">
                                         <div class="task-title">{{ task.name }}</div>
+                                        {% if task.operation_name %}
+                                        <div class="task-operation">{{ task.operation_name }}</div>
+                                        {% endif %}
                                         <div class="task-affair">{{ affair.name }}</div>
                                     </div>
                                     

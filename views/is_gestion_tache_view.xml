@@ -13,6 +13,8 @@
                     <header>
                         <button name="action_chargement_taches" type="object" string="Charger les tâches" class="oe_highlight" attrs="{'invisible': [('tache_count','>',0)]}"/>
                         <button name="action_maj_fermetures" type="object" string="Maj fermetures"/>
+                        <button name="action_maj_is_date_planifiee" type="object" string="Maj date OF"/>
+                        <button name="action_open_productions" type="object" string="Voir les OF" class="oe_link"/>
                         <button name="action_open_taches" type="object" string="Voir les tâches" class="oe_link"/>
                         <button name="action_open_fermetures" type="object" string="Voir les fermetures" class="oe_link"/>
                     </header>

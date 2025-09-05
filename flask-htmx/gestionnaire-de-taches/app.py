@@ -170,10 +170,14 @@ def load_tasks_from_db(planning_id=None):
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             if planning_id:
                 cursor.execute("""
-                    SELECT id, name, operator_id, affaire_id, start_date, duration_hours
-                    FROM is_gestion_tache 
-                    WHERE planning_id = %s
-                    ORDER BY start_date, operator_id
+                    SELECT 
+                        t.id, t.name, t.operator_id, t.affaire_id, t.start_date, t.duration_hours,
+                        t.operation_id,
+                        l.name AS operation_name
+                    FROM is_gestion_tache t
+                    LEFT JOIN is_ordre_travail_line l ON l.id = t.operation_id
+                    WHERE t.planning_id = %s
+                    ORDER BY t.start_date, t.operator_id
                 """, (planning_id,))
                 rows = cursor.fetchall()
                 for i, row in enumerate(rows):
@@ -209,7 +213,9 @@ def load_tasks_from_db(planning_id=None):
                         "affaire_id": row['affaire_id'],
                         "start_date": adjusted_start_date,  # Utiliser la date ajustée
                         "duration_hours": float(row['duration_hours']),  # S'assurer que c'est un float
-                        "name": row['name']
+                        "name": row['name'],
+                        "operation_id": row.get('operation_id'),
+                        "operation_name": row.get('operation_name')
                     }
                     
                     tasks.append(task)

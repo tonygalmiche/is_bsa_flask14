@@ -802,6 +802,7 @@ function showTooltip(event) {
         const tooltip = document.getElementById('task-tooltip');
         const title = task.dataset.title;
         const affairName = task.dataset.affairName;
+        const operationName = task.dataset.operationName; // <-- ajouté
         const duration = task.dataset.duration;
         const startSlot = task.dataset.startSlot;
         const taskId = task.dataset.taskId;
@@ -824,10 +825,10 @@ function showTooltip(event) {
         
         titleElement.textContent = title;
         detailElement.innerHTML = `
-            <div><strong>Affaire:</strong> ${affairName}</div>
+            ${operationName ? `<div><strong>Opération:</strong> ${operationName}</div>` : ''}
+            ${affairName ? `<div><strong>Affaire:</strong> ${affairName}</div>` : ''}
             <div><strong>Durée:</strong> ${duration} créneaux</div>
             <div><strong>Période:</strong> ${slotInfo.date} ${slotInfo.period}${duration > 1 ? ' → ' + endSlotInfo.date + ' ' + endSlotInfo.period : ''}</div>
-            ${odooUrlHtml}
         `;
         
         // Positionner l'infobulle
