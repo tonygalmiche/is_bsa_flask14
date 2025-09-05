@@ -9,43 +9,25 @@
             <field name="model">is.gestion.tache.planning</field>
             <field name="type">form</field>
             <field name="arch" type="xml">
-                <form>  
+                <form>
+                    <header>
+                        <button name="action_chargement_taches" type="object" string="Charger les tâches" class="oe_highlight" attrs="{'invisible': [('tache_count','>',0)]}"/>
+                        <button name="action_maj_fermetures" type="object" string="Maj fermetures"/>
+                        <button name="action_open_taches" type="object" string="Voir les tâches" class="oe_link"/>
+                        <button name="action_open_fermetures" type="object" string="Voir les fermetures" class="oe_link"/>
+                    </header>
                     <sheet>
                         <group>
                             <group>
                                 <field name="name"/> 
+                                <field name="tache_count"/> 
                             </group>
                             <group>
                                 <field name="type_donnees"/>
                                 <field name="workcenter_id" attrs="{'invisible':[('type_donnees','!=','operation')]}"/>
-                                <div>
-                                    <button name="action_chargement_taches" 
-                                            type="object" 
-                                            string="Chargement des tâches" 
-                                    />
-                                </div>
                             </group>
                         </group>
                         <notebook>
-
-                            <page string="Tâches">
-                                <field name="tache_ids">
-                                    <tree>
-                                        <field name="name"/>
-                                        <field name="operator_id" optional="show"/>
-                                        <field name="affaire_id" optional="show"/>
-                                        <field name="start_date" optional="show"/>
-                                        <field name="duration_hours" optional="show"/>
-                                        <field name="planning_id" optional="show"/>
-                                        <field name="order_id" optional="show" widget="many2one_clickable"/>
-                                        <field name="production_id" optional="show" widget="many2one_clickable"/>
-                                        <field name="ordre_travail_id" optional="show" widget="many2one_clickable"/>
-                                        <field name="operation_id" optional="show" widget="many2one_clickable"/>
-                                    </tree>
-                                </field>
-                            </page>
-
-
                             <page string="Affaires">
                                 <field name="affaire_ids">
                                     <tree>
@@ -213,6 +195,54 @@
             <field name="name">Gestion des Tâches</field>
             <field name="res_model">is.gestion.tache</field>
             <field name="view_mode">tree,form</field>
+        </record>
+
+
+        <!-- is.gestion.tache.fermeture -->
+        <record model="ir.ui.view" id="is_gestion_tache_fermeture_tree_view">
+            <field name="name">is_gestion_tache_fermeture_tree_view</field>
+            <field name="model">is.gestion.tache.fermeture</field>
+            <field name="arch" type="xml">
+                <tree>
+                    <field name="date_fermeture"/>
+                    <field name="operator_id" widget="many2one_clickable"/>
+                    <field name="intitule"/>
+                    <field name="planning_id" widget="many2one_clickable"/>
+                </tree>
+            </field>
+        </record>
+
+        <record model="ir.ui.view" id="is_gestion_tache_fermeture_form_view">
+            <field name="name">is_gestion_tache_fermeture_form_view</field>
+            <field name="model">is.gestion.tache.fermeture</field>
+            <field name="arch" type="xml">
+                <form>
+                    <sheet>
+                        <group>
+                            <field name="date_fermeture"/>
+                            <field name="operator_id"/>
+                            <field name="intitule"/>
+                        </group>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <record model="ir.ui.view" id="is_gestion_tache_fermeture_search_view">
+            <field name="name">is_gestion_tache_fermeture_search_view</field>
+            <field name="model">is.gestion.tache.fermeture</field>
+            <field name="arch" type="xml">
+                <search>
+                    <field name="date_fermeture"/>
+                    <field name="operator_id"/>
+                    <field name="intitule"/>
+                    <separator/>
+                    <group expand="0" string="Grouper par">
+                        <filter string="Date" name="group_date" context="{'group_by':'date_fermeture'}"/>
+                        <filter string="Opérateur" name="group_operator" context="{'group_by':'operator_id'}"/>
+                    </group>
+                </search>
+            </field>
         </record>
 
         <!-- Action pour ouvrir l'application Flask -->

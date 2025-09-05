@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from odoo import models,fields,api
 from odoo.exceptions import Warning
-from datetime import datetime
+from datetime import datetime, timedelta, date
 import random
 
 
@@ -28,11 +28,17 @@ class is_gestion_tache_planning(models.Model):
     tache_ids     = fields.One2many('is.gestion.tache'          , 'planning_id', string="Tâches")
     affaire_ids   = fields.One2many('is.gestion.tache.affaire'  , 'planning_id', string="Affaires")
     operateur_ids = fields.One2many('is.gestion.tache.operateur', 'planning_id', string="Opérateurs")
+    fermeture_ids = fields.One2many('is.gestion.tache.fermeture', 'planning_id', string="Fermetures")
     type_donnees  = fields.Selection([
         ('operation', 'Opération'),
         ('of', 'OF'),
     ], string="Type de données", default='operation')
     workcenter_id = fields.Many2one('mrp.workcenter', 'Poste de charge')
+    tache_count   = fields.Integer(string="Nb tâches", compute="_compute_counts")
+
+    def _compute_counts(self):
+        for rec in self:
+            rec.tache_count = len(rec.tache_ids)
 
 
     def action_chargement_taches(self):
@@ -132,6 +138,95 @@ class is_gestion_tache_planning(models.Model):
         return True
 
 
+    def action_maj_fermetures(self):
+        """Met à jour la liste des fermetures à partir des absences (is.absence).
+
+        Règles:
+        - On cible les opérateurs du planning (onglet Opérateurs). Si absent, on prend
+          les employés du poste de charge sélectionné.
+        - On supprime d'abord les fermetures existantes du planning puis on recrée
+          une ligne par jour et par opérateur pour chaque absence.
+        - L'intitulé reprend le motif d'absence et le commentaire éventuel.
+        """
+        for planning in self:
+            # Supprimer les fermetures existantes de ce planning
+            planning.fermeture_ids.unlink()
+
+            # Déterminer la liste des employés cibles
+            employee_ids = planning.operateur_ids.mapped('operator_id')
+            if not employee_ids and planning.workcenter_id:
+                employee_ids = self.env['hr.employee'].search([
+                    ('is_workcenter_id', '=', planning.workcenter_id.id)
+                ])
+
+            if not employee_ids:
+                continue
+
+            # Récupérer toutes les absences des employés cibles
+            absences = self.env['is.absence'].search([
+                ('employe_id', 'in', employee_ids.ids),
+            ])
+
+            vals_list = []
+            for absn in absences:
+                # Déterminer la plage de dates (par jour) couverte par l'absence
+                start_dt = absn.date_debut
+                end_dt = absn.date_fin
+                if not start_dt or not end_dt or start_dt >= end_dt:
+                    continue
+
+                # Fin exclusive => soustraire 1 seconde pour inclure le dernier jour
+                last_day = (end_dt - timedelta(seconds=1)).date()
+                cur_day = start_dt.date()
+
+                # Intitulé = motif [+ commentaire]
+                intitule = absn.motif_id.name or 'Absence'
+                if absn.commentaire:
+                    intitule = f"{intitule} - {absn.commentaire}"
+
+                while cur_day <= last_day:
+                    vals_list.append({
+                        'planning_id': planning.id,
+                        'operator_id': absn.employe_id.id,
+                        'date_fermeture': cur_day,
+                        'intitule': intitule,
+                    })
+                    cur_day = cur_day + timedelta(days=1)
+
+            if vals_list:
+                self.env['is.gestion.tache.fermeture'].create(vals_list)
+
+        return True
+
+
+    def action_open_taches(self):
+        """Ouvre la liste des tâches rattachées à ce planning."""
+        self.ensure_one()
+        return {
+            'name': 'Tâches du planning',
+            'type': 'ir.actions.act_window',
+            'res_model': 'is.gestion.tache',
+            'view_mode': 'tree,form',
+            'domain': [('planning_id', '=', self.id)],
+            'context': {'default_planning_id': self.id},
+            'target': 'current',
+        }
+
+
+    def action_open_fermetures(self):
+        """Ouvre la liste des fermetures rattachées à ce planning."""
+        self.ensure_one()
+        return {
+            'name': 'Fermetures du planning',
+            'type': 'ir.actions.act_window',
+            'res_model': 'is.gestion.tache.fermeture',
+            'view_mode': 'tree,form',
+            'domain': [('planning_id', '=', self.id)],
+            'context': {'default_planning_id': self.id},
+            'target': 'current',
+        }
+
+
 class is_gestion_tache_affaire(models.Model):
     _name='is.gestion.tache.affaire'
     _description='Affaires pour la gestion des tâches'
@@ -150,6 +245,18 @@ class is_gestion_tache_operateur(models.Model):
     _rec_name = 'operator_id'
 
     operator_id    = fields.Many2one('hr.employee', string="Opérateur", required=True)
+    planning_id    = fields.Many2one('is.gestion.tache.planning', string="Planning", ondelete='cascade')
+
+
+class is_gestion_tache_fermeture(models.Model):
+    _name='is.gestion.tache.fermeture'
+    _description='Fermetures pour la gestion des tâches'
+    _order='date_fermeture desc, operator_id'
+    _rec_name = 'intitule'
+
+    date_fermeture = fields.Date(string="Date de fermeture", required=True)
+    operator_id    = fields.Many2one('hr.employee', string="Opérateur")
+    intitule       = fields.Char(string="Intitulé")
     planning_id    = fields.Many2one('is.gestion.tache.planning', string="Planning", ondelete='cascade')
 
 
