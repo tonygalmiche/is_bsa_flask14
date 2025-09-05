@@ -29,6 +29,7 @@ class is_gestion_tache_planning(models.Model):
     affaire_ids   = fields.One2many('is.gestion.tache.affaire'  , 'planning_id', string="Affaires")
     operateur_ids = fields.One2many('is.gestion.tache.operateur', 'planning_id', string="Opérateurs")
     fermeture_ids = fields.One2many('is.gestion.tache.fermeture', 'planning_id', string="Fermetures")
+    affaire       = fields.Char(string="Affaire", help="Filtre sur le nom d'affaire. Vous pouvez saisir plusieurs valeurs séparées par des virgules.")
     type_donnees  = fields.Selection([
         ('operation', 'Opération'),
         ('of', 'OF'),
@@ -96,10 +97,24 @@ class is_gestion_tache_planning(models.Model):
                     and mp.state not in  ('cancer','done')
                     and line.workcenter_id=%s
                     and mp.is_pret='oui'
-                    -- and mp.is_sale_order_id=756
-                -- limit 20;
             """
-            cr.execute(SQL,[self.workcenter_id.id])
+
+            # Paramètres de base (poste de charge)
+            params = [self.workcenter_id.id]
+
+            # Ajout éventuel du filtre sur les affaires (sur le nom d'affaire)
+            if self.affaire:
+                # Supporte plusieurs termes séparés par des virgules => OR
+                terms = [t.strip() for t in self.affaire.split(',') if t.strip()]
+                if terms:
+                    clauses = ["so.is_nom_affaire ILIKE %s" for _ in terms]
+                    SQL += "\n                    and (" + " OR ".join(clauses) + ")\n"
+                    params.extend([f"%{t}%" for t in terms])
+
+            # SQL finale (limite optionnelle)
+            # SQL += "\n                -- limit 20;\n            # "
+
+            cr.execute(SQL, params)
             rows = cr.dictfetchall()   
             orders={}       
             for row in rows:
@@ -303,7 +318,8 @@ class is_gestion_tache_planning(models.Model):
         }
 
 
-    def action_maj_is_date_planifiee(self):
+
+    def action_maj_date_of(self):
         """Met à jour mrp.production.is_date_planifiee depuis les start_date des tâches du planning.
         Pour chaque OF lié, utilise la date de début la plus tôt.
         """
@@ -351,6 +367,104 @@ class is_gestion_tache_planning(models.Model):
                 'title': 'Mise à jour date OF',
                 'message': f"{updated} OF mis à jour.",
                 'type': 'success' if updated else 'warning',
+                'sticky': False,
+            }
+        }
+
+
+
+
+    def action_maj_date_operation(self):
+        """Ajuste heure_debut des opérations (is.ordre.travail.line) depuis les start_date des tâches,
+        puis recalcule les opérations suivantes de chaque OT en conservant la logique actuelle (au plus tôt).
+        """
+        self.ensure_one()
+        Task = self.env['is.gestion.tache']
+        Op = self.env['is.ordre.travail.line']
+        Ordre = self.env['is.ordre.travail']
+
+        tasks = self.tache_ids.filtered(lambda t: t.operation_id and t.start_date)
+        if not tasks:
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': 'Mise à jour opérations',
+                    'message': "Aucune tâche avec opération et date de début.",
+                    'type': 'warning',
+                    'sticky': False,
+                }
+            }
+
+        # Grouper par OT et traiter dans l'ordre des séquences
+        ops_by_ordre = {}
+        for t in tasks:
+            line = t.operation_id
+            if not line.ordre_id:
+                continue
+            ops_by_ordre.setdefault(line.ordre_id.id, []).append((line, t.start_date))
+
+        updated_ops = 0
+
+        for ordre_id, items in ops_by_ordre.items():
+            ordre = Ordre.browse(ordre_id)
+            # Indexer les lignes de l'OT par id pour accès rapide et ordonner par sequence
+            all_lines = self.env['is.ordre.travail.line'].search([('ordre_id', '=', ordre.id)], order="sequence")
+            seq_index = {l.id: i for i, l in enumerate(all_lines)}
+            # Trier les items par la position de la ligne dans l'OT (séquence croissante)
+            items.sort(key=lambda it: seq_index.get(it[0].id, 10**9))
+
+            for line, start_dt in items:
+                # 1) Fixer l'heure_debut de la ligne concernée et recalculer son heure_fin
+                line.heure_debut = start_dt
+                workcenter_id = line.workcenter_id.id
+                duree = line.reste
+                # Recalcule heure_fin de cette ligne en tenant compte des dispos
+                heure_fin = ordre.get_heure_debut_fin(workcenter_id, duree, heure_debut=start_dt, tache=line)
+                line.heure_fin = heure_fin
+                updated_ops += 1
+
+                # 2) Recalculer les opérations suivantes (logique au_plus_tot)
+                # Préparer variables de propagation comme dans calculer_charge_ordre_travail
+                heure_debut = heure_fin
+                duree_precedente = (heure_fin - start_dt).total_seconds()/3600 if (heure_fin and start_dt) else 0
+                mem_tps_apres = line.tps_apres
+
+                # Parcourir les lignes suivantes dans l'ordre
+                found_current = False
+                for tache in all_lines:
+                    if not found_current:
+                        if tache.id == line.id:
+                            found_current = True
+                        continue
+                    # Décale la date de début car 'Tps passage après' (en heures ouvrées)
+                    if mem_tps_apres and mem_tps_apres > 0 and heure_debut:
+                        heure_debut = ordre.get_heure_debut_fin(tache.workcenter_id.id, mem_tps_apres, heure_debut=heure_debut, tache=False)
+                    # Recouvrement (% de la durée précédente)
+                    duree_recouvrement = (duree_precedente or 0) * (tache.recouvrement or 0) / 100.0
+                    if heure_debut:
+                        heure_debut = heure_debut - timedelta(hours=duree_recouvrement)
+                    # Durée de la tache
+                    duree = tache.reste
+                    # Calcul heure_fin selon dispos et lier la tache aux dispos
+                    heure_fin = ordre.get_heure_debut_fin(tache.workcenter_id.id, duree, heure_debut=heure_debut, tache=tache)
+                    # Écriture
+                    tache.heure_debut = heure_debut
+                    tache.heure_fin = heure_fin
+                    updated_ops += 1
+                    # Préparer pour la suivante
+                    duree_relle = (heure_fin - heure_debut).total_seconds()/3600 if (heure_fin and heure_debut) else 0
+                    heure_debut = heure_fin
+                    duree_precedente = duree_relle
+                    mem_tps_apres = tache.tps_apres
+
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': 'Mise à jour opérations',
+                'message': f"{updated_ops} opérations recalculées.",
+                'type': 'success' if updated_ops else 'warning',
                 'sticky': False,
             }
         }
