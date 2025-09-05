@@ -1067,10 +1067,19 @@ def move_task():
             if collision:
                 resolve_all_collisions_on_operator(new_operator_id)
         
-        # Mise à jour de la base de données PostgreSQL
-        db_success = update_task_in_database(task_id, new_operator_id, task["start_date"], task["duration_hours"])
+        # Mise à jour de la base de données PostgreSQL pour TOUTES les tâches de l'opérateur impacté
+        tasks_to_update = [
+            {
+                'id': t['id'],
+                'operator_id': t['operator_id'],
+                'start_date': t['start_date'],
+                'duration_hours': t['duration_hours']
+            }
+            for t in TASKS if t['operator_id'] == new_operator_id
+        ]
+        db_success = update_multiple_tasks_in_database(tasks_to_update) if tasks_to_update else True
         if not db_success:
-            # En cas d'échec de la base de données, annuler les modifications en mémoire
+            # En cas d'échec de la base de données, annuler la tâche principale au minimum
             task["operator_id"] = old_operator_id
             update_task_from_slots(task, old_start_slot, duration_slots)
             return jsonify({"success": False, "error": "Erreur lors de la mise à jour en base de données"})
@@ -1151,9 +1160,18 @@ def keyboard_move_task():
                 if push_success:
                     # Le déplacement est possible, effectuer le changement d'opérateur
                     task["operator_id"] = new_operator_id
-                    
-                    # Mise à jour de la base de données PostgreSQL
-                    db_success = update_task_in_database(task_id, new_operator_id, task["start_date"], task["duration_hours"])
+
+                    # Persistons toutes les tâches du NOUVEL opérateur (poussées comprises)
+                    tasks_to_update = [
+                        {
+                            'id': t['id'],
+                            'operator_id': t['operator_id'],
+                            'start_date': t['start_date'],
+                            'duration_hours': t['duration_hours']
+                        }
+                        for t in TASKS if t['operator_id'] == new_operator_id
+                    ]
+                    db_success = update_multiple_tasks_in_database(tasks_to_update) if tasks_to_update else True
                     if not db_success:
                         # En cas d'échec de la base de données, annuler les modifications en mémoire
                         task["operator_id"] = old_operator_id
@@ -1210,8 +1228,18 @@ def resize_task():
         if collision:
             resolve_all_collisions_on_operator(task["operator_id"])
         
-        # Mise à jour de la base de données PostgreSQL
-        db_success = update_task_in_database(task_id, task["operator_id"], task["start_date"], task["duration_hours"])
+        # Mise à jour de la base de données PostgreSQL pour toutes les tâches de l'opérateur (si des poussées ont eu lieu)
+        operator_id = task["operator_id"]
+        tasks_to_update = [
+            {
+                'id': t['id'],
+                'operator_id': t['operator_id'],
+                'start_date': t['start_date'],
+                'duration_hours': t['duration_hours']
+            }
+            for t in TASKS if t['operator_id'] == operator_id
+        ]
+        db_success = update_multiple_tasks_in_database(tasks_to_update) if tasks_to_update else True
         if not db_success:
             # En cas d'échec de la base de données, annuler les modifications en mémoire
             update_task_from_slots(task, start_slot, old_duration_slots)
@@ -1284,8 +1312,17 @@ def resize_and_move_task():
         if old_operator_id != operator_id:
             resolve_all_collisions_on_operator(old_operator_id)
         
-        # Mise à jour de la base de données PostgreSQL
-        db_success = update_task_in_database(task_id, operator_id, task["start_date"], task["duration_hours"])
+        # Mise à jour de la base de données PostgreSQL pour toutes les tâches du NOUVEL opérateur
+        tasks_to_update = [
+            {
+                'id': t['id'],
+                'operator_id': t['operator_id'],
+                'start_date': t['start_date'],
+                'duration_hours': t['duration_hours']
+            }
+            for t in TASKS if t['operator_id'] == operator_id
+        ]
+        db_success = update_multiple_tasks_in_database(tasks_to_update) if tasks_to_update else True
         if not db_success:
             # En cas d'échec de la base de données, annuler les modifications en mémoire
             task["operator_id"] = old_operator_id
