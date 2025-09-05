@@ -1091,12 +1091,28 @@ def keyboard_move_task():
         if direction in ['left', 'right']:
             result = handle_keyboard_push(task_id, direction)
             if result["success"]:
-                # Mise à jour de la base de données PostgreSQL
+                # Si le déplacement est bloqué, ne rien enregistrer
+                if result.get('blocked'):
+                    return jsonify(result)
+
+                # Persistons toutes les tâches de l'opérateur affecté (poussées comprises)
                 task = next((t for t in TASKS if t["id"] == task_id), None)
                 if task:
-                    db_success = update_task_in_database(task_id, task["operator_id"], task["start_date"], task["duration_hours"])
-                    if not db_success:
-                        return jsonify({"success": False, "error": "Erreur lors de la mise à jour en base de données"})
+                    operator_id = task["operator_id"]
+                    # Préparer un bulk update pour toutes les tâches de cet opérateur
+                    tasks_to_update = [
+                        {
+                            'id': t['id'],
+                            'operator_id': t['operator_id'],
+                            'start_date': t['start_date'],
+                            'duration_hours': t['duration_hours']
+                        }
+                        for t in TASKS if t['operator_id'] == operator_id
+                    ]
+                    if tasks_to_update:
+                        db_success = update_multiple_tasks_in_database(tasks_to_update)
+                        if not db_success:
+                            return jsonify({"success": False, "error": "Erreur lors de la mise à jour en base de données"})
             return jsonify(result)
         
         elif direction in ['up', 'down']:
