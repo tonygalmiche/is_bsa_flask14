@@ -22,6 +22,7 @@ CURRENT_DATABASE_NAME = ""
 CURRENT_DATABASE_URL_ODOO = ""
 CURRENT_DATABASE_URL_TACHE_ODOO = ""
 CURRENT_PLANNING_ID = None
+CURRENT_PLANNING_END_DATE = None  # Date fin planning (date)
 
 # Sérialiseur personnalisé pour les dates
 class DateTimeEncoder(json.JSONEncoder):
@@ -35,7 +36,7 @@ app.json_encoder = DateTimeEncoder
 SLOT_WIDTH = 25  # Largeur d'un créneau en pixels (divisé par 3 : 60 -> 20)
 ROW_HEIGHT = 55  # Hauteur d'une ligne d'opérateur
 HEADER_HEIGHT = 80  # Hauteur de l'en-tête
-NUM_SLOTS = 90  # Nombre total de créneaux (triplé : 30 -> 90)
+NUM_SLOTS = 90  # Par défaut, sera recalculé après sélection d'un planning
 
 # Nouveaux paramètres
 #START_DATE =  (datetime.now() - timedelta(days=30)).date() # datetime.now().date()  # Date de début du planning (date du jour par défaut)
@@ -864,11 +865,45 @@ def planning_selection():
 @app.route('/select_planning/<int:planning_id>')
 def select_planning(planning_id):
     """Sélectionne un planning et redirige vers 'Gestion de tâches'"""
-    global CURRENT_PLANNING_ID, OPERATORS, AFFAIRES, TASKS
+    global CURRENT_PLANNING_ID, OPERATORS, AFFAIRES, TASKS, CURRENT_PLANNING_END_DATE, NUM_SLOTS, START_DATE
     
     try:
         # Sauvegarder l'ID du planning
         CURRENT_PLANNING_ID = planning_id
+
+        # Récupérer la date de fin du planning
+        CURRENT_PLANNING_END_DATE = None
+        try:
+            conn = get_db_connection()
+            if conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute(
+                        """
+                        SELECT date_fin_planning
+                        FROM is_gestion_tache_planning
+                        WHERE id = %s
+                        """,
+                        (planning_id,)
+                    )
+                    row = cursor.fetchone()
+                    if row and row.get('date_fin_planning'):
+                        # S'assurer d'avoir un objet date
+                        dfp = row['date_fin_planning']
+                        if isinstance(dfp, datetime):
+                            dfp = dfp.date()
+                        CURRENT_PLANNING_END_DATE = dfp
+                conn.close()
+        except Exception:
+            CURRENT_PLANNING_END_DATE = None
+
+        # Calculer NUM_SLOTS en fonction de la date du jour et de la date fin planning (2 slots/jour), min 60
+        today = date.today()
+        if CURRENT_PLANNING_END_DATE:
+            days_inclusive = (CURRENT_PLANNING_END_DATE - today).days + 1
+            required_slots = max(0, days_inclusive) * 2
+            NUM_SLOTS = max(required_slots, 60)
+        else:
+            NUM_SLOTS = max(60, NUM_SLOTS)
         
         # Charger les données filtrées par planning
         AFFAIRES = load_affaires_from_db(planning_id)

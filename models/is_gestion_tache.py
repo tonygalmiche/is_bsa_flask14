@@ -30,6 +30,7 @@ class is_gestion_tache_planning(models.Model):
     operateur_ids = fields.One2many('is.gestion.tache.operateur', 'planning_id', string="Opérateurs")
     fermeture_ids = fields.One2many('is.gestion.tache.fermeture', 'planning_id', string="Fermetures")
     affaire       = fields.Char(string="Affaire", help="Filtre sur le nom d'affaire. Vous pouvez saisir plusieurs valeurs séparées par des virgules.")
+    date_fin_planning = fields.Date(string="Date fin planning", help="Limite supérieure de la période du planning pour le chargement des tâches.")
     type_donnees  = fields.Selection([
         ('operation', 'Opération'),
         ('of', 'OF'),

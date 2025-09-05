@@ -29,6 +29,7 @@
                         <group>
                             <group>
                                 <field name="name"/> 
+                                <field name="date_fin_planning"/>
                                 <field name="tache_count"/> 
                             </group>
                             <group>
@@ -67,6 +68,11 @@
             <field name="arch" type="xml">
                 <tree>
                     <field name="name"/>
+                    <field name="type_donnees"/>
+                    <field name="workcenter_id"/>
+                    <field name="affaire"/>
+                    <field name="date_fin_planning" optional="show"/>
+                    <field name="tache_count"/>
                 </tree>
             </field>
         </record>
