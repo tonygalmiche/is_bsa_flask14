@@ -29,13 +29,17 @@ class is_gestion_tache_planning(models.Model):
     affaire_ids   = fields.One2many('is.gestion.tache.affaire'  , 'planning_id', string="Affaires")
     operateur_ids = fields.One2many('is.gestion.tache.operateur', 'planning_id', string="Opérateurs")
     fermeture_ids = fields.One2many('is.gestion.tache.fermeture', 'planning_id', string="Fermetures")
-    affaire       = fields.Char(string="Affaire", help="Filtre sur le nom d'affaire. Vous pouvez saisir plusieurs valeurs séparées par des virgules.")
     date_fin_planning = fields.Date(string="Date fin planning", help="Limite supérieure de la période du planning pour le chargement des tâches.")
     type_donnees  = fields.Selection([
         ('operation', 'Opération'),
         ('of', 'OF'),
     ], string="Type de données", default='operation')
     workcenter_id = fields.Many2one('mrp.workcenter', 'Poste de charge')
+    affaire       = fields.Char(string="Affaire", help="Filtre sur le nom d'affaire. Vous pouvez saisir plusieurs valeurs séparées par des virgules.")
+    is_pret       = fields.Selection([
+            ('oui', 'Oui'),
+            ('non', 'Non'),
+        ], "Prêt", help="Prêt à produire", default='oui')
     tache_count   = fields.Integer(string="Nb tâches", compute="_compute_counts")
 
     def _compute_counts(self):
@@ -93,6 +97,7 @@ class is_gestion_tache_planning(models.Model):
                 select 
                     so.id order_id,
                     so.is_nom_affaire affaire_name,
+                    so.is_couleur_affaire,
                     mp.name mp_name,
                     pt.name product_name,
                     pp.id product_id,
@@ -117,8 +122,9 @@ class is_gestion_tache_planning(models.Model):
                     and ot.state!='termine'
                     and mp.state not in  ('cancer','done')
                     and line.workcenter_id=%s
-                    and mp.is_pret='oui'
             """
+            if self.is_pret:
+                SQL += " and is_pret='%s' "%self.is_pret
 
             # Paramètres de base (poste de charge)
             params = [self.workcenter_id.id]
@@ -139,12 +145,21 @@ class is_gestion_tache_planning(models.Model):
             rows = cr.dictfetchall()   
             orders={}       
             for row in rows:
-
                 #** Ajout de l'affaire ****************************************
                 if row['order_id'] not in orders:
-                    color = generer_couleur_foncee()
+                    color = row['is_couleur_affaire']
+
+                    #** Si l'affaire n'a pas de couleur, il faut la générer ***
+                    if not color:
+                        color = generer_couleur_foncee()
+                        lines = self.env['sale.order'].search([('id','=',row['order_id'])])
+                        for line in lines:
+                            line.is_couleur_affaire = color
+                    print(row['is_couleur_affaire'], color)
+                    #**********************************************************
                     vals={
                         "name"       : row['affaire_name'],
+                        "order_id"   : row['order_id'],
                         "planning_id": self.id,
                         "color"      : color,
                     }
@@ -499,9 +514,18 @@ class is_gestion_tache_affaire(models.Model):
     _order='name'
 
     name        = fields.Char("Affaire", required=True)
-    color       = fields.Char(string="Couleur")
+    order_id    = fields.Many2one('sale.order', string="Commande")
+    color       = fields.Char(string="Couleur", compute='_compute_color', store=True, readonly=True)
     planning_id = fields.Many2one('is.gestion.tache.planning', string="Planning", ondelete='cascade')
 
+
+    @api.depends('order_id.is_couleur_affaire')
+    def _compute_color(self):
+        for obj in self:
+            color = False
+            if obj.order_id:
+                color = obj.order_id.is_couleur_affaire
+            obj.color = color
 
 
 class is_gestion_tache_operateur(models.Model):

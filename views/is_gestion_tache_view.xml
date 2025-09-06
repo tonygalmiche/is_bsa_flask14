@@ -36,20 +36,22 @@
                                 <field name="type_donnees"/>
                                 <field name="workcenter_id" attrs="{'invisible':[('type_donnees','!=','operation')]}"/>
                                 <field name="affaire"/>
+                                <field name="is_pret"/>
 
                             </group>
                         </group>
                         <notebook>
                             <page string="Affaires">
-                                <field name="affaire_ids">
+                                <field name="affaire_ids" readonly="1">
                                     <tree>
                                         <field name="name"/>
+                                        <field name="order_id" widget="many2one_clickable"/>
                                         <field name="color" widget="color"/>
                                     </tree>
                                 </field>
                             </page>
                             <page string="Opérateurs">
-                                <field name="operateur_ids">
+                                <field name="operateur_ids" readonly="1">
                                     <tree>
                                         <field name="operator_id"/>
                                     </tree>
@@ -71,6 +73,7 @@
                     <field name="type_donnees"/>
                     <field name="workcenter_id"/>
                     <field name="affaire"/>
+                    <field name="is_pret"/>
                     <field name="date_fin_planning" optional="show"/>
                     <field name="tache_count"/>
                 </tree>

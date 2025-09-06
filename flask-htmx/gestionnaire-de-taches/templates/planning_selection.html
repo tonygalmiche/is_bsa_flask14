@@ -6,13 +6,23 @@
     <title>Sélection du Planning</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+
         .planning-selection-container {
             min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 2rem 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
         }
 
         .selection-card {
@@ -23,6 +33,7 @@
             text-align: center;
             max-width: 900px;
             width: 90%;
+            margin: 0 auto;
         }
 
         .selection-title {
@@ -89,10 +100,10 @@
         }
 
         .planning-name {
-            font-size: 1.2rem;
+            font-size: 1rem;
             font-weight: 600;
             color: #333;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.2rem;
         }
 
         .planning-stats {
@@ -170,8 +181,8 @@
             }
             
             .planning-option {
-                min-height: 100px;
-                padding: 1rem;
+                min-height: 50px;
+                padding: 0.5rem;
             }
             
             .planning-icon {
@@ -206,7 +217,7 @@
             <div class="plannings-grid">
                 {% for planning in plannings %}
                 <a href="{{ url_for('select_planning', planning_id=planning.id) }}" class="planning-option">
-                    <div class="planning-icon">📋</div>
+                    <!-- <div class="planning-icon">📋</div> -->
                     <div class="planning-name">{{ planning.name }}</div>
                     <div class="planning-stats">
                         <span>{{ planning.tache_count }} tâches</span>
@@ -223,17 +234,17 @@
             {% endif %}
             
             <div class="footer-actions">
-                {% if current_database_url_odoo %}
+                <!-- {% if current_database_url_odoo %}
                 <a href="{{ current_database_url_odoo }}" target="_blank" class="back-button" style="background-color: #007bff; color: white;">
                     🏢 Ouvrir Odoo
                 </a>
-                {% endif %}
+                {% endif %} -->
                 <a href="{{ url_for('database_selection') }}" class="back-button">
-                    ← Changer de base de données
+                    Changer de base de données
                 </a>
-                <div class="footer-info">
+                <!-- <div class="footer-info">
                     Cliquez sur un planning pour accéder à 'Gestion de tâches'
-                </div>
+                </div> -->
             </div>
         </div>
     </div>
