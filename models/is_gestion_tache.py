@@ -193,6 +193,7 @@ class is_gestion_tache_planning(models.Model):
                     res=self.env['is.gestion.tache'].create(vals)
                 #**************************************************************
 
+            self.action_maj_fermetures()
         return True
 
 
@@ -208,6 +209,10 @@ class is_gestion_tache_planning(models.Model):
                 - L'intitulé reprend le motif d'absence et le commentaire éventuel pour is.absence,
                     et le nom de la fermeture de calendrier pour resource.calendar.leaves.
         """
+
+        print('TEST action_maj_fermetures')
+
+
         for planning in self:
             # Supprimer les fermetures existantes de ce planning
             planning.fermeture_ids.unlink()

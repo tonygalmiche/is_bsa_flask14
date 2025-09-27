@@ -268,28 +268,17 @@
         <!-- Action pour ouvrir l'application Flask -->
         <record model="ir.actions.server" id="is_gestion_tache_flask_action">
             <field name="name">Application Flask</field>
-            <field name="model_id" ref="base.model_res_company"/>
+            <field name="model_id" ref="model_is_gestion_tache_planning"/>
             <field name="state">code</field>
             <field name="code">
-company = env.user.company_id
-if company.is_url_app_flask:
-    action = {
-        'type': 'ir.actions.act_url',
-        'url': company.is_url_app_flask,
-        'target': 'new',
-    }
-else:
-    # Retourner une action qui affiche un message d'erreur
-    action = {
-        'type': 'ir.actions.client',
-        'tag': 'display_notification',
-        'params': {
-            'title': 'Configuration manquante',
-            'message': 'URL de l\'application Flask non configurée dans les paramètres de la société.',
-            'type': 'warning',
-            'sticky': False,
-        }
-    }
+# Récupérer l'URL depuis les paramètres système (configurable)
+flask_url = env['ir.config_parameter'].sudo().get_param('is_gestion_tache.flask_url', 'http://localhost:5000')
+
+action = {
+    'type': 'ir.actions.act_url',
+    'url': flask_url,
+    'target': 'new',
+}
             </field>
         </record>
 
