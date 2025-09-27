@@ -271,8 +271,9 @@
             <field name="model_id" ref="model_is_gestion_tache_planning"/>
             <field name="state">code</field>
             <field name="code">
-# Récupérer l'URL depuis les paramètres système (configurable)
-flask_url = env['ir.config_parameter'].sudo().get_param('is_gestion_tache.flask_url', 'http://localhost:5000')
+# Récupérer l'URL depuis le champ de la société
+company = env.user.company_id
+flask_url = company.is_url_app_flask or 'http://localhost:5000'
 
 action = {
     'type': 'ir.actions.act_url',
