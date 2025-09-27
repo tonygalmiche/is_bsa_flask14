@@ -19,11 +19,13 @@
                         />
                         <button 
                             name="action_maj_date_operation" type="object" string="Maj date opération" 
+                            attrs="{'invisible':[('type_donnees','!=','operation')]}"
                             confirm="ATTENTION, cela va changer l'heure de début prévue des opérations concernées et également l'heure de début des opérations suivantes des OF"
                         />
-                        <button name="action_open_productions" type="object" string="Voir les OF" class="oe_link"/>
-                        <button name="action_open_taches" type="object" string="Voir les tâches" class="oe_link"/>
-                        <button name="action_open_fermetures" type="object" string="Voir les fermetures" class="oe_link"/>
+                        <button name="action_open_productions"     type="object" string="Voir les OF" class="oe_link"/>
+                        <button name="action_open_operation_lines" type="object" string="Voir les lignes d'opérations" class="oe_link" attrs="{'invisible':[('type_donnees','!=','operation')]}"/>
+                        <button name="action_open_taches"          type="object" string="Voir les tâches" class="oe_link"/>
+                        <button name="action_open_fermetures"      type="object" string="Voir les fermetures" class="oe_link"/>
                     </header>
                     <sheet>
                         <group>
@@ -33,8 +35,8 @@
                                 <field name="tache_count"/> 
                             </group>
                             <group>
-                                <field name="type_donnees"/>
-                                <field name="workcenter_id" attrs="{'invisible':[('type_donnees','!=','operation')]}"/>
+                                <field name="type_donnees" required="1"/>
+                                <field name="workcenter_id" attrs="{'invisible':[('type_donnees','!=','operation')], 'required':[('type_donnees','==','operation')]}"/>
                                 <field name="affaire"/>
                                 <field name="is_pret"/>
 

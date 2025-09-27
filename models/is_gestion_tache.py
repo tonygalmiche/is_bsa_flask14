@@ -48,51 +48,75 @@ class is_gestion_tache_planning(models.Model):
 
 
     def _update_operation_employees_from_tasks(self, tasks):
-        """Met à jour le champ employe_id sur les lignes d'OT (is.ordre.travail.line)
+        """Met à jour le champ employe_id sur les lignes d'OT ou les OF
         à partir des tâches fournies (operator_id).
-
         Retourne le nombre de lignes mises à jour.
         """
         updated_lines = 0
         for t in tasks:
-            line = t.operation_id
-            emp = t.operator_id
-            if line and emp and line.employe_id.id != emp.id:
-                try:
-                    line.write({'employe_id': emp.id})
+            employe = t.operator_id
+            if self.type_donnees=='operation':
+                operation_line = t.operation_id
+                if operation_line and employe and operation_line.employe.id != employe.id:
+                    operation_line.write({'employe_id': employe.id})
                     updated_lines += 1
+            else:
+                production = t.production_id
+                if production and employe:
+                    production.is_employe_id = employe.id 
+                    updated_lines += 1
+        return updated_lines
+
+
+    def _update_operation_durations_from_tasks(self, tasks):
+        """Met à jour le champ duree_unitaire sur les lignes d'OT (is.ordre.travail.line)
+        à partir des tâches fournies (duration_hours).
+
+        Retourne le nombre de lignes mises à jour.
+        """
+        updated_durations = 0
+        for t in tasks:
+            line = t.operation_id
+            if line and t.duration_hours and line.duree_unitaire != t.duration_hours:
+                try:
+                    line.write({'duree_unitaire': t.duration_hours})
+                    updated_durations += 1
                 except Exception:
                     # Ignorer les erreurs pour ne pas bloquer l'action globale
                     continue
-        return updated_lines
+        return updated_durations
 
 
     def action_chargement_taches(self):
         """Action pour charger les tâches selon le type de données sélectionné"""
         cr=self._cr
+        self.tache_ids.unlink()
+        self.affaire_ids.unlink()
+        self.operateur_ids.unlink()
+
+        #** Ajout des opérateurs ******************************************
+        domain=[]
         if self.type_donnees=='operation' and self.workcenter_id:
-            self.tache_ids.unlink()
-            self.affaire_ids.unlink()
-            self.operateur_ids.unlink()
-
-
-            #** Ajout des opérateurs ******************************************
             domain=[
                 ('is_workcenter_id', '=' , self.workcenter_id.id),
             ]
-            operateurs=self.env['hr.employee'].search(domain)
+        if self.type_donnees=='of':
+            domain=[
+                ('department_id', '=' , 16), #Acier
+            ]
+        operateurs=self.env['hr.employee'].search(domain)
+        default_operator_id=False
+        for operateur in operateurs:
+            vals={
+                "operator_id"  : operateur.id,
+                "planning_id"    : self.id,
+            }
+            res=self.env['is.gestion.tache.operateur'].create(vals)
+            default_operator_id = operateur.id
+        #******************************************************************
 
-            default_operator_id=False
-            for operateur in operateurs:
-                vals={
-                    "operator_id"  : operateur.id,
-                    "planning_id"    : self.id,
-                }
-                res=self.env['is.gestion.tache.operateur'].create(vals)
-                default_operator_id = operateur.id
-            #******************************************************************
-
-            #** Recherche des taches et affaires ******************************
+        #** Recherche des taches et affaires ******************************
+        if self.type_donnees=='operation' and self.workcenter_id:
             SQL="""
                 select 
                     so.id order_id,
@@ -109,7 +133,8 @@ class is_gestion_tache_planning(models.Model):
                     line.workcenter_id,
                     line.name line_name,
                     line.state,
-                    line.reste duration_hours,
+                    -- line.reste duration_hours,
+                    line.duree_totale duration_hours,
                     line.heure_debut start_date,
                     line.employe_id
                 from is_ordre_travail_line line join is_ordre_travail ot on line.ordre_id=ot.id
@@ -117,83 +142,113 @@ class is_gestion_tache_planning(models.Model):
                                                 join sale_order so on mp.is_sale_order_id=so.id
                                                 join product_product pp on mp.product_id=pp.id
                                                 join product_template pt on pp.product_tmpl_id=pt.id
-
                 where line.state not in ('annule','termine')
                     and ot.state!='termine'
                     and mp.state not in  ('cancer','done')
                     and line.workcenter_id=%s
             """
-            if self.is_pret:
-                SQL += " and is_pret='%s' "%self.is_pret
+        else:
+            SQL="""
+                select 
+                    so.id order_id,
+                    so.is_nom_affaire affaire_name,
+                    so.is_couleur_affaire,
+                    mp.name mp_name,
+                    pt.name product_name,
+                    pp.id product_id,
+                    mp.id production_id,
+                    ot.id ordre_travail_id,
+                    ot.name ot_name,
+                    null operation_id,
+                    null ordre_id,
+                    null workcenter_id,
+                    null line_name,
+                    null state,
+                    ot.duree_prevue duration_hours,
+                    mp.date_planned_start start_date,
+                    mp.is_employe_id employe_id
+                from is_ordre_travail ot join mrp_production mp on ot.production_id=mp.id
+                                         join sale_order so on mp.is_sale_order_id=so.id
+                                         join product_product pp on mp.product_id=pp.id
+                                         join product_template pt on pp.product_tmpl_id=pt.id
 
-            # Paramètres de base (poste de charge)
-            params = [self.workcenter_id.id]
+                where so.id>0
+                    -- and line.state not in ('annule','termine')
+                    and ot.state!='termine'
+                    and mp.state not in  ('cancer','done')
+                    -- and line.workcenter_id=%s
+            """
+        if self.is_pret:
+            SQL += " and is_pret='%s' "%self.is_pret
 
-            # Ajout éventuel du filtre sur les affaires (sur le nom d'affaire)
-            if self.affaire:
-                # Supporte plusieurs termes séparés par des virgules => OR
-                terms = [t.strip() for t in self.affaire.split(',') if t.strip()]
-                if terms:
-                    clauses = ["so.is_nom_affaire ILIKE %s" for _ in terms]
-                    SQL += "\n                    and (" + " OR ".join(clauses) + ")\n"
-                    params.extend([f"%{t}%" for t in terms])
+        # Paramètres de base (poste de charge)
+        params = [self.workcenter_id.id]
 
-            # SQL finale (limite optionnelle)
-            # SQL += "\n                -- limit 20;\n            # "
+        # Ajout éventuel du filtre sur les affaires (sur le nom d'affaire)
+        if self.affaire:
+            # Supporte plusieurs termes séparés par des virgules => OR
+            terms = [t.strip() for t in self.affaire.split(',') if t.strip()]
+            if terms:
+                clauses = ["so.is_nom_affaire ILIKE %s" for _ in terms]
+                SQL += "\n                    and (" + " OR ".join(clauses) + ")\n"
+                params.extend([f"%{t}%" for t in terms])
 
-            cr.execute(SQL, params)
-            rows = cr.dictfetchall()   
-            orders={}       
-            for row in rows:
-                #** Ajout de l'affaire ****************************************
-                if row['order_id'] not in orders:
-                    color = row['is_couleur_affaire']
 
-                    #** Si l'affaire n'a pas de couleur, il faut la générer ***
-                    if not color:
-                        color = generer_couleur_foncee()
-                        lines = self.env['sale.order'].search([('id','=',row['order_id'])])
-                        for line in lines:
-                            line.is_couleur_affaire = color
-                    print(row['is_couleur_affaire'], color)
-                    #**********************************************************
-                    vals={
-                        "name"       : row['affaire_name'],
-                        "order_id"   : row['order_id'],
-                        "planning_id": self.id,
-                        "color"      : color,
-                    }
-                    affaire=self.env['is.gestion.tache.affaire'].create(vals)
-                    orders[row['order_id']] = affaire
-                else:
-                    affaire=orders[row['order_id']]
-                #**************************************************************
+        cr.execute(SQL, params)
+        rows = cr.dictfetchall()   
+        orders={}       
+        for row in rows:
+            #** Ajout de l'affaire ****************************************
+            if row['order_id'] not in orders:
+                color = row['is_couleur_affaire']
 
-                #** Ajout de la tache *****************************************
-                if affaire:
-                    start_date = row['start_date']
-                    if start_date< datetime.now():
-                        start_date =  datetime.now()
+                #** Si l'affaire n'a pas de couleur, il faut la générer ***
+                if not color:
+                    color = generer_couleur_foncee()
+                    lines = self.env['sale.order'].search([('id','=',row['order_id'])])
+                    for line in lines:
+                        line.is_couleur_affaire = color
+                #**********************************************************
+                vals={
+                    "name"       : row['affaire_name'] or '??',
+                    "order_id"   : row['order_id'],
+                    "planning_id": self.id,
+                    "color"      : color,
+                }
+                affaire=self.env['is.gestion.tache.affaire'].create(vals)
+                orders[row['order_id']] = affaire
+            else:
+                affaire=orders[row['order_id']]
+            #**************************************************************
 
-                    product = self.env['product.product'].search([('id','=',row['product_id'])])[0]
-                    variant = product.product_template_attribute_value_ids._get_combination_name()
-                    name = "[%s] %s" % (variant, row.get('product_name'))
-                    vals={
-                        "name"          : name,
-                        "operator_id"   : row['employe_id'] or default_operator_id,
-                        "affaire_id"    : affaire.id,
-                        "start_date"    : start_date,
-                        "duration_hours": row['duration_hours'],
-                        "planning_id"   : self.id,
-                        "order_id"   : row['order_id'],
-                        "production_id"   : row['production_id'],
-                        "ordre_travail_id"   : row['ordre_travail_id'],
-                        "operation_id"   : row['operation_id'],
-                    }
-                    res=self.env['is.gestion.tache'].create(vals)
-                #**************************************************************
+            #** Ajout de la tache *****************************************
+            if affaire:
+                start_date = row['start_date']
+                if start_date< datetime.now():
+                    start_date =  datetime.now()
 
-            self.action_maj_fermetures()
+                product = self.env['product.product'].search([('id','=',row['product_id'])])[0]
+                variant = product.product_template_attribute_value_ids._get_combination_name()
+                name = "[%s] %s" % (variant, row.get('product_name'))
+                vals={
+                    "name"          : name,
+                    "operator_id"   : row['employe_id'] or default_operator_id,
+                    "affaire_id"    : affaire.id,
+                    "start_date"    : start_date,
+                    "duration_hours": row['duration_hours'],
+                    "planning_id"   : self.id,
+                    "order_id"   : row['order_id'],
+                    "production_id"   : row['production_id'],
+                    "ordre_travail_id"   : row['ordre_travail_id'],
+                    "operation_id"   : row['operation_id'],
+                }
+
+                print(vals,default_operator_id)
+
+                res=self.env['is.gestion.tache'].create(vals)
+            #**************************************************************
+
+        self.action_maj_fermetures()
         return True
 
 
@@ -209,10 +264,6 @@ class is_gestion_tache_planning(models.Model):
                 - L'intitulé reprend le motif d'absence et le commentaire éventuel pour is.absence,
                     et le nom de la fermeture de calendrier pour resource.calendar.leaves.
         """
-
-        print('TEST action_maj_fermetures')
-
-
         for planning in self:
             # Supprimer les fermetures existantes de ce planning
             planning.fermeture_ids.unlink()
@@ -359,6 +410,20 @@ class is_gestion_tache_planning(models.Model):
         }
 
 
+    def action_open_operation_lines(self):
+        """Ouvre la liste des lignes d'opérations (is.ordre.travail.line) référencées dans les tâches du planning."""
+        self.ensure_one()
+        operation_ids = self.tache_ids.mapped('operation_id').ids
+        domain = [('id', 'in', operation_ids)] if operation_ids else [('id', '=', 0)]
+        return {
+            'name': 'Lignes d\'opérations liées',
+            'type': 'ir.actions.act_window',
+            'res_model': 'is.ordre.travail.line',
+            'view_mode': 'tree,form',
+            'domain': domain,
+            'target': 'current',
+        }
+
 
     def action_maj_date_of(self):
         """Pour chaque OF présent dans ce planning, met à jour mrp.production.date_planned_start
@@ -373,29 +438,22 @@ class is_gestion_tache_planning(models.Model):
                     productions[task.production_id]=task
                 if productions[task.production_id].start_date>task.start_date:
                     productions[task.production_id]=task
-            
-        
         for production in productions:
-
-            #delta = heure_debut_operation_modifiee - heure_debut_operation_actuelle
-
-
-
-            #Delta entre l'heure de début de l'opération concernée et l'heure de début de l'OF
-            heure_debut_operation_actuelle = productions[production].operation_id.heure_debut
-            date_planned_start_of_actuelle =  production.date_planned_start
-            delta = heure_debut_operation_actuelle - date_planned_start_of_actuelle
-
-            #La nouvelle heure de début de l'OF est égale à la nouvelle heure de l'opération moins ce delta
             heure_debut_operation_modifiee = productions[production].start_date
-            date_planned_start_new = heure_debut_operation_modifiee - delta
-
-            #print(production, date_planned_start_of_actuelle, heure_debut_operation_actuelle,delta)
+            date_planned_start_new = heure_debut_operation_modifiee
+            if self.type_donnees=='operation':
+                heure_debut_operation_actuelle = productions[production].operation_id.heure_debut
+                date_planned_start_of_actuelle =  production.date_planned_start
+                if heure_debut_operation_actuelle and date_planned_start_of_actuelle:
+                    delta = heure_debut_operation_actuelle - date_planned_start_of_actuelle
+                    #La nouvelle heure de début de l'OF est égale à la nouvelle heure de l'opération moins ce delta
+                    date_planned_start_new = heure_debut_operation_modifiee - delta
             production.date_planned_start = date_planned_start_new
-        
+            
       
         # Mettre à jour l'employé sur les opérations liées aux tâches
-        tasks = self.tache_ids.filtered(lambda t: t.operation_id and t.start_date)
+        #tasks = self.tache_ids.filtered(lambda t: t.operation_id and t.start_date)
+        tasks = self.tache_ids
         updated_lines = self._update_operation_employees_from_tasks(tasks)
 
 
@@ -455,8 +513,20 @@ class is_gestion_tache_planning(models.Model):
             items.sort(key=lambda it: seq_index.get(it[0].id, 10**9))
 
             for line, start_dt in items:
+                # 0) Trouver la tâche correspondante pour récupérer la durée
+                corresponding_task = None
+                for t in tasks:
+                    if t.operation_id.id == line.id:
+                        corresponding_task = t
+                        break
+                
                 # 1) Fixer l'heure_debut de la ligne concernée et recalculer son heure_fin
                 line.heure_debut = start_dt
+                
+                # 1.1) Mettre à jour duree_unitaire avec la durée de la tâche si disponible
+                if corresponding_task and corresponding_task.duration_hours:
+                    line.duree_unitaire = corresponding_task.duration_hours
+                
                 workcenter_id = line.workcenter_id.id
                 duree = line.reste
                 # Recalcule heure_fin de cette ligne en tenant compte des dispos
@@ -500,14 +570,17 @@ class is_gestion_tache_planning(models.Model):
 
         # Mettre à jour l'employé sur les opérations liées aux tâches
         updated_lines = self._update_operation_employees_from_tasks(tasks)
+        
+        # Mettre à jour les durées unitaires sur les opérations liées aux tâches
+        updated_durations = self._update_operation_durations_from_tasks(tasks)
 
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',
             'params': {
                 'title': 'Mise à jour opérations',
-                'message': f"{updated_ops} opérations recalculées, {updated_lines} employés affectés.",
-                'type': 'success' if (updated_ops or updated_lines) else 'warning',
+                'message': f"{updated_ops} opérations recalculées, {updated_lines} employés affectés, {updated_durations} durées mises à jour.",
+                'type': 'success' if (updated_ops or updated_lines or updated_durations) else 'warning',
                 'sticky': False,
             }
         }
