@@ -70,8 +70,8 @@
                             <!-- Ligne des jours -->
                             <div class="header-row header-days">
                                 {% for day in days %}
-                                    <div class="header-cell day-cell{% if day.day_name in ['Sat', 'Sun'] %} weekend-header{% endif %}">
-                                        <div class="day-date">{{ day.date }}</div>
+                                    <div class="header-cell day-cell{% if day.day_name in ['Samedi', 'Dimanche'] %} weekend-header{% endif %}">
+                                        <div class="day-date">{{ day.day_name[0] }}{{ day.date }}</div>
                                     </div>
                                 {% endfor %}
                             </div>
@@ -79,7 +79,7 @@
                             <!-- Ligne AM/PM -->
                             <div class="header-row header-periods">
                                 {% for slot in time_slots %}
-                                    <div class="header-cell period-cell{% if slot.day_name in ['Sat', 'Sun'] %} weekend-header{% endif %}{% if slot.is_vacation %} vacation-header{% endif %}">{{ slot.period }}</div>
+                                    <div class="header-cell period-cell{% if slot.day_name in ['Samedi', 'Dimanche'] %} weekend-header{% endif %}{% if slot.is_vacation %} vacation-header{% endif %}">{{ slot.period }}</div>
                                 {% endfor %}
                             </div>
                         </div>
@@ -99,7 +99,7 @@
                         <div class="time-slots-container">
                             <div class="time-slots-wrapper">
                                 {% for slot in time_slots %}
-                                <div class="time-slot{% if slot.day_name in ['Sat', 'Sun'] %} weekend-slot{% endif %}{% if slot.is_vacation %} vacation-slot{% endif %}{% if operator_absences[operator.id][slot.slot] %} absence-slot{% endif %}" 
+                                <div class="time-slot{% if slot.day_name in ['Samedi', 'Dimanche'] %} weekend-slot{% endif %}{% if slot.is_vacation %} vacation-slot{% endif %}{% if operator_absences[operator.id][slot.slot] %} absence-slot{% endif %}" 
                                      data-operator-id="{{ operator.id }}" 
                                      data-slot="{{ slot.slot }}"
                                      ondrop="handleDrop(event)" 

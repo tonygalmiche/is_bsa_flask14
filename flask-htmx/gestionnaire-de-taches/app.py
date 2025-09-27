@@ -424,6 +424,28 @@ def load_fermetures_from_db(planning_id=None):
         # En cas d'erreur, ne rien bloquer: garder listes vides
         VACATION_DATES = []
 
+def calculate_planning_start_date(tasks):
+    """Calcule la date de début du planning basée sur la première tâche"""
+    if not tasks:
+        return datetime.now().date()  # Si pas de tâches, utiliser la date actuelle
+    
+    # Trouver la date de la première tâche
+    earliest_date = None
+    for task in tasks:
+        task_date = task.get('start_date')
+        if task_date:
+            if isinstance(task_date, datetime):
+                task_date_only = task_date.date()
+            elif isinstance(task_date, date):
+                task_date_only = task_date
+            else:
+                continue
+                
+            if earliest_date is None or task_date_only < earliest_date:
+                earliest_date = task_date_only
+    
+    return earliest_date if earliest_date else datetime.now().date()
+
 def date_to_slot(task_date):
     """Convertit une date/datetime en numéro de slot"""
     if isinstance(task_date, str):
@@ -909,6 +931,39 @@ def select_planning(planning_id):
         AFFAIRES = load_affaires_from_db(planning_id)
         TASKS = load_tasks_from_db(planning_id)
         OPERATORS = load_operators_from_db(planning_id)
+        
+        # Calculer la date de début du planning basée sur la première tâche
+        START_DATE = calculate_planning_start_date(TASKS)
+        
+        # Recalculer NUM_SLOTS en fonction de la nouvelle date de début et de la date de fin
+        if CURRENT_PLANNING_END_DATE:
+            days_inclusive = (CURRENT_PLANNING_END_DATE - START_DATE).days + 1
+            required_slots = max(0, days_inclusive) * 2
+            NUM_SLOTS = max(required_slots, 60)
+        else:
+            # Si pas de date de fin, calculer en fonction des tâches
+            if TASKS:
+                # Trouver la dernière tâche
+                latest_date = START_DATE
+                for task in TASKS:
+                    task_date = task.get('start_date')
+                    if task_date:
+                        if isinstance(task_date, datetime):
+                            task_date_only = task_date.date()
+                        elif isinstance(task_date, date):
+                            task_date_only = task_date
+                        else:
+                            continue
+                        if task_date_only > latest_date:
+                            latest_date = task_date_only
+                
+                # Ajouter quelques jours de marge après la dernière tâche
+                days_inclusive = (latest_date - START_DATE).days + 1 + 7  # +7 jours de marge
+                required_slots = days_inclusive * 2
+                NUM_SLOTS = max(required_slots, 60)
+            else:
+                NUM_SLOTS = max(60, NUM_SLOTS)
+        
         # Charger les fermetures (met à jour VACATION_DATES et les absences opérateurs)
         load_fermetures_from_db(planning_id)
         
@@ -986,17 +1041,32 @@ def planning():
         # Pour les jours
         day_key = current_date.strftime("%d/%m")
         if is_morning:  # Nouveau jour
+            # Conversion des jours en français
+            day_names_fr = {
+                'Monday': 'Lundi', 'Tuesday': 'Mardi', 'Wednesday': 'Mercredi',
+                'Thursday': 'Jeudi', 'Friday': 'Vendredi', 'Saturday': 'Samedi', 'Sunday': 'Dimanche'
+            }
+            day_name_en = current_date.strftime("%A")  # Nom complet en anglais
+            day_name_fr = day_names_fr.get(day_name_en, day_name_en)
             days.append({
                 "date": day_key,
                 "start_slot": i,
-                "day_name": current_date.strftime("%a")  # Ajouter le nom du jour
+                "day_name": day_name_fr  # Nom du jour en français
             })
+        
+        # Conversion des jours en français pour time_slots
+        day_names_fr = {
+            'Monday': 'Lundi', 'Tuesday': 'Mardi', 'Wednesday': 'Mercredi',
+            'Thursday': 'Jeudi', 'Friday': 'Vendredi', 'Saturday': 'Samedi', 'Sunday': 'Dimanche'
+        }
+        day_name_en = current_date.strftime("%A")  # Nom complet en anglais
+        day_name_fr = day_names_fr.get(day_name_en, day_name_en)
         
         time_slots.append({
             "slot": i,
             "date": current_date.strftime("%d/%m"),
             "period": time_label,
-            "day_name": current_date.strftime("%a"),
+            "day_name": day_name_fr,  # Nom du jour en français
             "is_vacation": is_vacation_slot(i)  # Ajouter l'info de congé
         })
     
@@ -1436,7 +1506,7 @@ def debug_html():
 @app.route('/api/reload-data', methods=['POST'])
 def reload_data():
     """Recharge à la fois les opérateurs, les affaires et les tâches depuis la base de données"""
-    global OPERATORS, AFFAIRES, TASKS
+    global OPERATORS, AFFAIRES, TASKS, START_DATE, NUM_SLOTS
     try:
         # Recharger les opérateurs
         new_operators = load_operators_from_db(CURRENT_PLANNING_ID)
@@ -1454,6 +1524,39 @@ def reload_data():
         OPERATORS = new_operators
         AFFAIRES = new_affaires
         TASKS = new_tasks
+        
+        # Recalculer la date de début du planning basée sur les nouvelles tâches
+        START_DATE = calculate_planning_start_date(TASKS)
+        
+        # Recalculer NUM_SLOTS
+        if CURRENT_PLANNING_END_DATE:
+            days_inclusive = (CURRENT_PLANNING_END_DATE - START_DATE).days + 1
+            required_slots = max(0, days_inclusive) * 2
+            NUM_SLOTS = max(required_slots, 60)
+        else:
+            # Si pas de date de fin, calculer en fonction des tâches
+            if TASKS:
+                # Trouver la dernière tâche
+                latest_date = START_DATE
+                for task in TASKS:
+                    task_date = task.get('start_date')
+                    if task_date:
+                        if isinstance(task_date, datetime):
+                            task_date_only = task_date.date()
+                        elif isinstance(task_date, date):
+                            task_date_only = task_date
+                        else:
+                            continue
+                        if task_date_only > latest_date:
+                            latest_date = task_date_only
+                
+                # Ajouter quelques jours de marge après la dernière tâche
+                days_inclusive = (latest_date - START_DATE).days + 1 + 7  # +7 jours de marge
+                required_slots = days_inclusive * 2
+                NUM_SLOTS = max(required_slots, 60)
+            else:
+                NUM_SLOTS = max(60, NUM_SLOTS)
+        
         # Recharger les fermetures après avoir défini OPERATORS
         load_fermetures_from_db(CURRENT_PLANNING_ID)
         
@@ -1511,9 +1614,42 @@ def reload_operators():
 @app.route('/api/reload-tasks', methods=['POST'])
 def reload_tasks():
     """Recharge les tâches depuis la base de données"""
-    global TASKS
+    global TASKS, START_DATE, NUM_SLOTS
     try:
         TASKS = load_tasks_from_db(CURRENT_PLANNING_ID)
+        
+        # Recalculer la date de début du planning basée sur les nouvelles tâches
+        START_DATE = calculate_planning_start_date(TASKS)
+        
+        # Recalculer NUM_SLOTS
+        if CURRENT_PLANNING_END_DATE:
+            days_inclusive = (CURRENT_PLANNING_END_DATE - START_DATE).days + 1
+            required_slots = max(0, days_inclusive) * 2
+            NUM_SLOTS = max(required_slots, 60)
+        else:
+            # Si pas de date de fin, calculer en fonction des tâches
+            if TASKS:
+                # Trouver la dernière tâche
+                latest_date = START_DATE
+                for task in TASKS:
+                    task_date = task.get('start_date')
+                    if task_date:
+                        if isinstance(task_date, datetime):
+                            task_date_only = task_date.date()
+                        elif isinstance(task_date, date):
+                            task_date_only = task_date
+                        else:
+                            continue
+                        if task_date_only > latest_date:
+                            latest_date = task_date_only
+                
+                # Ajouter quelques jours de marge après la dernière tâche
+                days_inclusive = (latest_date - START_DATE).days + 1 + 7  # +7 jours de marge
+                required_slots = days_inclusive * 2
+                NUM_SLOTS = max(required_slots, 60)
+            else:
+                NUM_SLOTS = max(60, NUM_SLOTS)
+        
         return jsonify({
             "success": True, 
             "message": f"{len(TASKS)} tâches rechargées",
