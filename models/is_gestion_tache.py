@@ -57,7 +57,7 @@ class is_gestion_tache_planning(models.Model):
             employe = t.operator_id
             if self.type_donnees=='operation':
                 operation_line = t.operation_id
-                if operation_line and employe and operation_line.employe.id != employe.id:
+                if operation_line and employe and operation_line.employe_id.id != employe.id:
                     operation_line.write({'employe_id': employe.id})
                     updated_lines += 1
             else:
@@ -242,9 +242,6 @@ class is_gestion_tache_planning(models.Model):
                     "ordre_travail_id"   : row['ordre_travail_id'],
                     "operation_id"   : row['operation_id'],
                 }
-
-                print(vals,default_operator_id)
-
                 res=self.env['is.gestion.tache'].create(vals)
             #**************************************************************
 
