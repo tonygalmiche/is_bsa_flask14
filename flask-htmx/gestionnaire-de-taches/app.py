@@ -133,110 +133,245 @@ def load_affaires_from_db(planning_id=None):
     except Exception as e:
         raise Exception(f"Erreur lors du chargement des affaires depuis la base de données: {str(e)}")
 
+
+def get_type_donnees(cr,planning_id=None):
+    type_donnees = False
+    cr.execute("SELECT id,type_donnees FROM is_gestion_tache_planning WHERE id=%s"%planning_id)
+    rows= cr.fetchall()
+    for  row in rows:
+        type_donnees = row['type_donnees']
+    return type_donnees
+
+
 def load_operators_from_db(planning_id=None):
     """Charge les opérateurs depuis la base PostgreSQL"""
-    try:
-        conn = get_db_connection()
-        if not conn:
+    operators = []
+    if planning_id:
+        cnx = get_db_connection()
+        if not cnx:
             raise Exception("Impossible de se connecter à la base de données PostgreSQL")
-        
-        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-          
-
-            operators = []
-            if planning_id:
-                cursor.execute("""
+        cr = cnx.cursor(cursor_factory=RealDictCursor)
+        type_donnees = get_type_donnees(cr,planning_id)
+        # cr.execute("SELECT id,type_donnees FROM is_gestion_tache_planning WHERE id=%s"%planning_id)
+        # rows= cr.fetchall()
+        # type_donnees = False
+        # for  row in rows:
+        #     type_donnees = row['type_donnees']
+        if type_donnees:
+            if type_donnees=='operation':
+                cr.execute("""
                     SELECT op.operator_id, he.name
                     FROM is_gestion_tache_operateur op join hr_employee he on op.operator_id=he.id 
                     WHERE planning_id = %s
                     ORDER BY name
                 """, (planning_id,))
-                rows = cursor.fetchall()
-                operators = []
-                
+                rows = cr.fetchall()
                 for i, row in enumerate(rows):
                     operators.append({
                         "id": row['operator_id'],
                         "name": row['name'],
-                        "absences": []  # Pas d'absences dans un premier temps
+                        "absences": []
                     })
-                
-                conn.close()
-            return operators
-            
-    except Exception as e:
-        raise Exception(f"Erreur lors du chargement des opérateurs depuis la base de données: {str(e)}")
+            if type_donnees=='of':
+                cr.execute("""
+                    SELECT w.workcenter_id,mw.name
+                    FROM is_gestion_tache_workcenter w join mrp_workcenter mw on w.workcenter_id=mw.id 
+                    WHERE planning_id = %s
+                    ORDER BY name
+                """, (planning_id,))
+                rows = cr.fetchall()
+                for i, row in enumerate(rows):
+                    operators.append({
+                        "id": row['workcenter_id'],
+                        "name": row['name'],
+                        "absences": []
+                    })
+    cnx.close()
+    return operators
+
+
+
+
 
 def load_tasks_from_db(planning_id=None):
     """Charge les tâches depuis la base PostgreSQL"""
+    tasks = []
+    if planning_id:
+        cnx = get_db_connection()
+        if not cnx:
+            raise Exception("Impossible de se connecter à la base de données PostgreSQL")
+        utc_tz = pytz.UTC
+        paris_tz = pytz.timezone('Europe/Paris')
+        cr = cnx.cursor(cursor_factory=RealDictCursor)
+        type_donnees = get_type_donnees(cr,planning_id)
+        rows=False
+        if type_donnees=='operation':
+            cr.execute("""
+                SELECT 
+                    t.id, t.name, t.operator_id, t.affaire_id, t.start_date, t.duration_hours,
+                    t.operation_id,
+                    l.name AS operation_name
+                FROM is_gestion_tache t
+                LEFT JOIN is_ordre_travail_line l ON l.id = t.operation_id
+                WHERE t.planning_id = %s
+                ORDER BY t.start_date, t.operator_id
+            """, (planning_id,))
+            rows = cr.fetchall()
+
+
+        if type_donnees=='of':
+            cr.execute("""
+                SELECT 
+                    t.id, t.name, 
+                    t.workcenter_id as operator_id, 
+                    t.affaire_id, t.start_date, t.duration_hours,
+                    t.operation_id,
+                    '??' AS operation_name
+                FROM is_gestion_tache t 
+                WHERE t.planning_id = %s
+                ORDER BY t.start_date, t.operator_id
+            """, (planning_id,))
+            rows = cr.fetchall()
+
+
+
+
+
+        if type_donnees and rows:
+
+            for i, row in enumerate(rows):
+
+                # Convertir l'heure UTC en heure de Paris
+                start_date_utc = row['start_date']
+                if start_date_utc.tzinfo is None:
+                    # Si pas de timezone, on assume que c'est UTC
+                    start_date_utc = utc_tz.localize(start_date_utc)
+                elif start_date_utc.tzinfo != utc_tz:
+                    # Convertir vers UTC si ce n'est pas déjà le cas
+                    start_date_utc = start_date_utc.astimezone(utc_tz)
+                
+                # Convertir vers l'heure de Paris
+                start_date_paris = start_date_utc.astimezone(paris_tz)
+                
+                # Déterminer le slot selon la logique : avant 12H = AM, après 12H = PM
+                paris_hour = start_date_paris.hour
+                if paris_hour < 12:
+                    # Slot AM (8H)
+                    adjusted_start_date = start_date_paris.replace(hour=8, minute=0, second=0, microsecond=0)
+                else:
+                    # Slot PM (14H)
+                    adjusted_start_date = start_date_paris.replace(hour=14, minute=0, second=0, microsecond=0)
+                
+                # Convertir en datetime naïf (sans timezone) pour compatibilité avec le reste du code
+                adjusted_start_date = adjusted_start_date.replace(tzinfo=None)
+                
+                # Convertir les données de la base vers le format attendu par l'application
+                task = {
+                    "id": str(row['id']),  # Convertir en string pour compatibilité
+                    "operator_id": row['operator_id'],
+                    "affaire_id": row['affaire_id'],
+                    "start_date": adjusted_start_date,  # Utiliser la date ajustée
+                    "duration_hours": float(row['duration_hours']),  # S'assurer que c'est un float
+                    "name": row['name'],
+                    "operation_id": row.get('operation_id'),
+                    "operation_name": row.get('operation_name')
+                }
+                tasks.append(task)
+            
+            cr.close()
+        return tasks
+            
+
+
+
+
+# def load_tasks_from_db(planning_id=None):
+#     """Charge les tâches depuis la base PostgreSQL"""
+#     try:
+#         conn = get_db_connection()
+#         if not conn:
+#             raise Exception("Impossible de se connecter à la base de données PostgreSQL")
+        
+#         # Définir les fuseaux horaires
+#         utc_tz = pytz.UTC
+#         paris_tz = pytz.timezone('Europe/Paris')
+
+#         tasks = []
+#         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+#             if planning_id:
+#                 cursor.execute("""
+#                     SELECT 
+#                         t.id, t.name, t.operator_id, t.affaire_id, t.start_date, t.duration_hours,
+#                         t.operation_id,
+#                         l.name AS operation_name
+#                     FROM is_gestion_tache t
+#                     LEFT JOIN is_ordre_travail_line l ON l.id = t.operation_id
+#                     WHERE t.planning_id = %s
+#                     ORDER BY t.start_date, t.operator_id
+#                 """, (planning_id,))
+#                 rows = cursor.fetchall()
+#                 for i, row in enumerate(rows):
+
+#                     # Convertir l'heure UTC en heure de Paris
+#                     start_date_utc = row['start_date']
+#                     if start_date_utc.tzinfo is None:
+#                         # Si pas de timezone, on assume que c'est UTC
+#                         start_date_utc = utc_tz.localize(start_date_utc)
+#                     elif start_date_utc.tzinfo != utc_tz:
+#                         # Convertir vers UTC si ce n'est pas déjà le cas
+#                         start_date_utc = start_date_utc.astimezone(utc_tz)
+                    
+#                     # Convertir vers l'heure de Paris
+#                     start_date_paris = start_date_utc.astimezone(paris_tz)
+                    
+#                     # Déterminer le slot selon la logique : avant 12H = AM, après 12H = PM
+#                     paris_hour = start_date_paris.hour
+#                     if paris_hour < 12:
+#                         # Slot AM (8H)
+#                         adjusted_start_date = start_date_paris.replace(hour=8, minute=0, second=0, microsecond=0)
+#                     else:
+#                         # Slot PM (14H)
+#                         adjusted_start_date = start_date_paris.replace(hour=14, minute=0, second=0, microsecond=0)
+                    
+#                     # Convertir en datetime naïf (sans timezone) pour compatibilité avec le reste du code
+#                     adjusted_start_date = adjusted_start_date.replace(tzinfo=None)
+                    
+#                     # Convertir les données de la base vers le format attendu par l'application
+#                     task = {
+#                         "id": str(row['id']),  # Convertir en string pour compatibilité
+#                         "operator_id": row['operator_id'],
+#                         "affaire_id": row['affaire_id'],
+#                         "start_date": adjusted_start_date,  # Utiliser la date ajustée
+#                         "duration_hours": float(row['duration_hours']),  # S'assurer que c'est un float
+#                         "name": row['name'],
+#                         "operation_id": row.get('operation_id'),
+#                         "operation_name": row.get('operation_name')
+#                     }
+                    
+#                     tasks.append(task)
+            
+#             conn.close()
+#             return tasks
+            
+#     except Exception as e:
+#         raise Exception(f"Erreur lors du chargement des tâches depuis la base de données: {str(e)}")
+
+def get_current_planning_type_donnees():
+    """Récupère le type de données du planning actuel"""
+    if not CURRENT_PLANNING_ID:
+        return None
     try:
         conn = get_db_connection()
         if not conn:
-            raise Exception("Impossible de se connecter à la base de données PostgreSQL")
+            return None
         
-        # Définir les fuseaux horaires
-        utc_tz = pytz.UTC
-        paris_tz = pytz.timezone('Europe/Paris')
-
-        tasks = []
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            if planning_id:
-                cursor.execute("""
-                    SELECT 
-                        t.id, t.name, t.operator_id, t.affaire_id, t.start_date, t.duration_hours,
-                        t.operation_id,
-                        l.name AS operation_name
-                    FROM is_gestion_tache t
-                    LEFT JOIN is_ordre_travail_line l ON l.id = t.operation_id
-                    WHERE t.planning_id = %s
-                    ORDER BY t.start_date, t.operator_id
-                """, (planning_id,))
-                rows = cursor.fetchall()
-                for i, row in enumerate(rows):
-
-                    # Convertir l'heure UTC en heure de Paris
-                    start_date_utc = row['start_date']
-                    if start_date_utc.tzinfo is None:
-                        # Si pas de timezone, on assume que c'est UTC
-                        start_date_utc = utc_tz.localize(start_date_utc)
-                    elif start_date_utc.tzinfo != utc_tz:
-                        # Convertir vers UTC si ce n'est pas déjà le cas
-                        start_date_utc = start_date_utc.astimezone(utc_tz)
-                    
-                    # Convertir vers l'heure de Paris
-                    start_date_paris = start_date_utc.astimezone(paris_tz)
-                    
-                    # Déterminer le slot selon la logique : avant 12H = AM, après 12H = PM
-                    paris_hour = start_date_paris.hour
-                    if paris_hour < 12:
-                        # Slot AM (8H)
-                        adjusted_start_date = start_date_paris.replace(hour=8, minute=0, second=0, microsecond=0)
-                    else:
-                        # Slot PM (14H)
-                        adjusted_start_date = start_date_paris.replace(hour=14, minute=0, second=0, microsecond=0)
-                    
-                    # Convertir en datetime naïf (sans timezone) pour compatibilité avec le reste du code
-                    adjusted_start_date = adjusted_start_date.replace(tzinfo=None)
-                    
-                    # Convertir les données de la base vers le format attendu par l'application
-                    task = {
-                        "id": str(row['id']),  # Convertir en string pour compatibilité
-                        "operator_id": row['operator_id'],
-                        "affaire_id": row['affaire_id'],
-                        "start_date": adjusted_start_date,  # Utiliser la date ajustée
-                        "duration_hours": float(row['duration_hours']),  # S'assurer que c'est un float
-                        "name": row['name'],
-                        "operation_id": row.get('operation_id'),
-                        "operation_name": row.get('operation_name')
-                    }
-                    
-                    tasks.append(task)
-            
+            cursor.execute("SELECT type_donnees FROM is_gestion_tache_planning WHERE id = %s", (CURRENT_PLANNING_ID,))
+            result = cursor.fetchone()
             conn.close()
-            return tasks
-            
-    except Exception as e:
-        raise Exception(f"Erreur lors du chargement des tâches depuis la base de données: {str(e)}")
+            return result['type_donnees'] if result else None
+    except Exception:
+        return None
 
 def update_task_in_database(task_id, operator_id, start_date, duration_hours):
     """Met à jour une tâche dans la base de données PostgreSQL"""
@@ -261,10 +396,14 @@ def update_task_in_database(task_id, operator_id, start_date, duration_hours):
         # Convertir vers UTC pour stockage en base
         start_date_utc = start_date_paris.astimezone(utc_tz)
         
+        # Déterminer le champ à mettre à jour selon le type de données
+        type_donnees = get_current_planning_type_donnees()
+        operator_field = "workcenter_id" if type_donnees == 'of' else "operator_id"
+        
         with conn.cursor() as cursor:
-            cursor.execute("""
+            cursor.execute(f"""
                 UPDATE is_gestion_tache 
-                SET operator_id = %s, start_date = %s, duration_hours = %s
+                SET {operator_field} = %s, start_date = %s, duration_hours = %s
                 WHERE id = %s
             """, (operator_id, start_date_utc, duration_hours, int(task_id)))
             
@@ -291,6 +430,10 @@ def update_multiple_tasks_in_database(tasks_data):
         paris_tz = pytz.timezone('Europe/Paris')
         utc_tz = pytz.UTC
         
+        # Déterminer le champ à mettre à jour selon le type de données
+        type_donnees = get_current_planning_type_donnees()
+        operator_field = "workcenter_id" if type_donnees == 'of' else "operator_id"
+        
         with conn.cursor() as cursor:
             for task_data in tasks_data:
                 task_id = task_data['id']
@@ -310,9 +453,9 @@ def update_multiple_tasks_in_database(tasks_data):
                 # Convertir vers UTC pour stockage en base
                 start_date_utc = start_date_paris.astimezone(utc_tz)
                 
-                cursor.execute("""
+                cursor.execute(f"""
                     UPDATE is_gestion_tache 
-                    SET operator_id = %s, start_date = %s, duration_hours = %s
+                    SET {operator_field} = %s, start_date = %s, duration_hours = %s
                     WHERE id = %s
                 """, (operator_id, start_date_utc, duration_hours, int(task_id)))
             
@@ -435,62 +578,6 @@ def load_fermetures_from_db(planning_id=None):
         # En cas d'erreur, ne rien bloquer: garder listes vides
         VACATION_DATES = []
 
-
-
-# def call_odoo_action_maj_fermetures(planning_id):
-#     """Appelle la méthode action_maj_fermetures d'Odoo en important directement le modèle"""
-#     try:
-#         # Configuration d'Odoo
-#         os.environ.setdefault('ODOO_RC', '/etc/odoo/odoo.conf')  # Ajustez le chemin si nécessaire
-        
-#         # Tentative d'import des modules Odoo si disponibles
-#         import odoo
-#         from odoo import api, registry, tools
-        
-#         # Initialiser Odoo si ce n'est pas déjà fait
-#         if not hasattr(odoo, '_initialized'):
-#             # Configuration minimale d'Odoo
-#             odoo.tools.config.parse_config([
-#                 '--addons-path=' + ','.join(ODOO_ADDONS_PATHS),
-#                 '--database=' + CURRENT_DATABASE_CONFIG.get('database', ''),
-#                 '--db_host=' + CURRENT_DATABASE_CONFIG.get('host', 'localhost'),
-#                 '--db_port=' + str(CURRENT_DATABASE_CONFIG.get('port', 5432)),
-#                 '--db_user=' + CURRENT_DATABASE_CONFIG.get('user', 'odoo'),
-#                 '--db_password=' + CURRENT_DATABASE_CONFIG.get('password', ''),
-#             ])
-#             odoo._initialized = True
-        
-#         # Obtenir le nom de la base de données
-#         db_name = CURRENT_DATABASE_CONFIG.get('database')
-#         if not db_name:
-#             print('TEST : call_odoo_action_maj_fermetures : Pas de nom de base de données')
-#             return False
-            
-#         # Créer une registry et un environnement Odoo
-#         db_registry = registry(db_name)
-#         with db_registry.cursor() as cr:
-#             env = api.Environment(cr, 1, {})  # uid=1 (admin)
-            
-#             # Récupérer le planning et appeler la méthode
-#             planning = env['is.gestion.tache.planning'].browse(planning_id)
-#             if planning.exists():
-#                 result = planning.action_maj_fermetures()
-#                 print('TEST : call_odoo_action_maj_fermetures : Succès', result)
-#                 cr.commit()
-#                 return True
-#             else:
-#                 print('TEST : call_odoo_action_maj_fermetures : Planning non trouvé', planning_id)
-        
-#         return False
-        
-#     except ImportError as e:
-#         print('TEST : call_odoo_action_maj_fermetures : ImportError', str(e))
-#         return False
-#     except Exception as e:
-#         print('TEST : call_odoo_action_maj_fermetures : Exception', str(e))
-
-
-#         return False
 
 
 

@@ -24,11 +24,12 @@ class is_gestion_tache_planning(models.Model):
     _description='Planning pour la gestion des tâches'
     _order='name'
 
-    name          = fields.Char("Planning", required=True)
-    tache_ids     = fields.One2many('is.gestion.tache'          , 'planning_id', string="Tâches")
-    affaire_ids   = fields.One2many('is.gestion.tache.affaire'  , 'planning_id', string="Affaires")
-    operateur_ids = fields.One2many('is.gestion.tache.operateur', 'planning_id', string="Opérateurs")
-    fermeture_ids = fields.One2many('is.gestion.tache.fermeture', 'planning_id', string="Fermetures")
+    name           = fields.Char("Planning", required=True)
+    tache_ids      = fields.One2many('is.gestion.tache'           , 'planning_id', string="Tâches")
+    affaire_ids    = fields.One2many('is.gestion.tache.affaire'   , 'planning_id', string="Affaires")
+    operateur_ids  = fields.One2many('is.gestion.tache.operateur' , 'planning_id', string="Opérateurs")
+    workcenter_ids = fields.One2many('is.gestion.tache.workcenter', 'planning_id', string="Postes de charge")
+    fermeture_ids  = fields.One2many('is.gestion.tache.fermeture', 'planning_id', string="Fermetures")
     date_fin_planning = fields.Date(string="Date fin planning", help="Limite supérieure de la période du planning pour le chargement des tâches.")
     type_donnees  = fields.Selection([
         ('operation', 'Opération'),
@@ -93,6 +94,7 @@ class is_gestion_tache_planning(models.Model):
         self.tache_ids.unlink()
         self.affaire_ids.unlink()
         self.operateur_ids.unlink()
+        self.workcenter_ids.unlink()
 
         #** Ajout des opérateurs ******************************************
         domain=[]
@@ -113,6 +115,21 @@ class is_gestion_tache_planning(models.Model):
             }
             res=self.env['is.gestion.tache.operateur'].create(vals)
             default_operator_id = operateur.id
+        #******************************************************************
+
+        #** Ajout des postes de charges ***********************************
+        domain=[
+            ('is_gestion_tache', '=' , True), 
+        ]
+        workcenters=self.env['mrp.workcenter'].search(domain)
+        default_workcenter_id=False
+        for workcenter in workcenters:
+            vals={
+                "workcenter_id": workcenter.id,
+                "planning_id"  : self.id,
+            }
+            res=self.env['is.gestion.tache.workcenter'].create(vals)
+            default_workcenter_id = workcenter.id
         #******************************************************************
 
         #** Recherche des taches et affaires ******************************
@@ -161,12 +178,12 @@ class is_gestion_tache_planning(models.Model):
                     ot.name ot_name,
                     null operation_id,
                     null ordre_id,
-                    null workcenter_id,
                     null line_name,
                     null state,
                     ot.duree_prevue duration_hours,
                     mp.date_planned_start start_date,
-                    mp.is_employe_id employe_id
+                    mp.is_employe_id employe_id,
+                    mp.is_workcenter_id as workcenter_id
                 from is_ordre_travail ot join mrp_production mp on ot.production_id=mp.id
                                          join sale_order so on mp.is_sale_order_id=so.id
                                          join product_product pp on mp.product_id=pp.id
@@ -232,7 +249,8 @@ class is_gestion_tache_planning(models.Model):
                 name = "[%s] %s" % (variant, row.get('product_name'))
                 vals={
                     "name"          : name,
-                    "operator_id"   : row['employe_id'] or default_operator_id,
+                    "operator_id"   : row['employe_id']    or default_operator_id,
+                    "workcenter_id" : row['workcenter_id'] or default_workcenter_id,
                     "affaire_id"    : affaire.id,
                     "start_date"    : start_date,
                     "duration_hours": row['duration_hours'],
@@ -435,9 +453,12 @@ class is_gestion_tache_planning(models.Model):
                     productions[task.production_id]=task
                 if productions[task.production_id].start_date>task.start_date:
                     productions[task.production_id]=task
+
         for production in productions:
             heure_debut_operation_modifiee = productions[production].start_date
             date_planned_start_new = heure_debut_operation_modifiee
+            if self.type_donnees=='of':
+                production.is_workcenter_id = productions[production].workcenter_id.id
             if self.type_donnees=='operation':
                 heure_debut_operation_actuelle = productions[production].operation_id.heure_debut
                 date_planned_start_of_actuelle =  production.date_planned_start
@@ -613,6 +634,16 @@ class is_gestion_tache_operateur(models.Model):
     planning_id    = fields.Many2one('is.gestion.tache.planning', string="Planning", ondelete='cascade')
 
 
+class is_gestion_tache_workcenter(models.Model):
+    _name='is.gestion.tache.workcenter'
+    _description='Postes de charge pour la gestion des tâches'
+    _order='workcenter_id'
+    _rec_name = 'workcenter_id'
+
+    workcenter_id = fields.Many2one('mrp.workcenter', string="Poste de charge", required=True)
+    planning_id   = fields.Many2one('is.gestion.tache.planning', string="Planning", ondelete='cascade')
+
+
 class is_gestion_tache_fermeture(models.Model):
     _name='is.gestion.tache.fermeture'
     _description='Fermetures pour la gestion des tâches'
@@ -631,7 +662,8 @@ class is_gestion_tache(models.Model):
     _order='name'
 
     name           = fields.Char("Tache", required=True)
-    operator_id    = fields.Many2one('hr.employee', string="Opérateur", required=True)
+    operator_id    = fields.Many2one('hr.employee', string="Opérateur")
+    workcenter_id  = fields.Many2one('mrp.workcenter', string="Poste de charge")
     affaire_id     = fields.Many2one('is.gestion.tache.affaire', string="Affaire", required=False)
     start_date     = fields.Datetime(string="Date de début", required=True)
     duration_hours = fields.Float(string="Durée (heures)", required=True)
