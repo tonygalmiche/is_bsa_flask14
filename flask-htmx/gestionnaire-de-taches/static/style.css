@@ -527,6 +527,15 @@ body.dragging-active .task:not(.dragging) {
     line-height: 1.0; /* Réduit l'interligne */
 }
 
+.task-quantity {
+    font-size: 10px; /* Augmenté de 20% : 8px * 1.2 = 9.6px ≈ 10px */
+    opacity: 0.9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.0; /* Réduit l'interligne */
+}
+
 
 
 

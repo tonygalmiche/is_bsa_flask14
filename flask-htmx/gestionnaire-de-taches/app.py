@@ -79,6 +79,7 @@ def load_plannings_from_db():
                 FROM is_gestion_tache_planning p
                 LEFT JOIN is_gestion_tache t ON t.planning_id = p.id
                 LEFT JOIN is_gestion_tache_affaire a ON a.planning_id = p.id
+                WHERE p.active=true
                 GROUP BY p.id, p.name
                 ORDER BY p.name
             """)
@@ -209,10 +210,12 @@ def load_tasks_from_db(planning_id=None):
             cr.execute("""
                 SELECT 
                     t.id, t.name, t.operator_id, t.affaire_id, t.start_date, t.duration_hours,
-                    t.operation_id,
-                    l.name AS operation_name
+                    t.operation_id, t.product_qty, t.production_id,
+                    l.name AS operation_name,
+                    mp.is_employe_ids_txt
                 FROM is_gestion_tache t
                 LEFT JOIN is_ordre_travail_line l ON l.id = t.operation_id
+                LEFT JOIN mrp_production mp ON mp.id = t.production_id
                 WHERE t.planning_id = %s
                 ORDER BY t.start_date, t.operator_id
             """, (planning_id,))
@@ -225,9 +228,11 @@ def load_tasks_from_db(planning_id=None):
                     t.id, t.name, 
                     t.workcenter_id as operator_id, 
                     t.affaire_id, t.start_date, t.duration_hours,
-                    t.operation_id,
-                    '??' AS operation_name
+                    t.operation_id, t.product_qty, t.production_id,
+                    '??' AS operation_name,
+                    mp.is_employe_ids_txt
                 FROM is_gestion_tache t 
+                LEFT JOIN mrp_production mp ON mp.id = t.production_id
                 WHERE t.planning_id = %s
                 ORDER BY t.start_date, t.operator_id
             """, (planning_id,))
@@ -274,7 +279,9 @@ def load_tasks_from_db(planning_id=None):
                     "duration_hours": float(row['duration_hours']),  # S'assurer que c'est un float
                     "name": row['name'],
                     "operation_id": row.get('operation_id'),
-                    "operation_name": row.get('operation_name')
+                    "operation_name": row.get('operation_name'),
+                    "product_qty": row.get('product_qty'),
+                    "is_employe_ids_txt": row.get('is_employe_ids_txt')
                 }
                 tasks.append(task)
             

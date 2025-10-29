@@ -23,24 +23,26 @@ class is_gestion_tache_planning(models.Model):
     _name='is.gestion.tache.planning'
     _description='Planning pour la gestion des tâches'
     _order='name'
+    _inherit = ['mail.thread', 'mail.activity.mixin', 'portal.mixin']
 
-    name           = fields.Char("Planning", required=True)
-    tache_ids      = fields.One2many('is.gestion.tache'           , 'planning_id', string="Tâches")
-    affaire_ids    = fields.One2many('is.gestion.tache.affaire'   , 'planning_id', string="Affaires")
-    operateur_ids  = fields.One2many('is.gestion.tache.operateur' , 'planning_id', string="Opérateurs")
-    workcenter_ids = fields.One2many('is.gestion.tache.workcenter', 'planning_id', string="Postes de charge")
-    fermeture_ids  = fields.One2many('is.gestion.tache.fermeture', 'planning_id', string="Fermetures")
-    date_fin_planning = fields.Date(string="Date fin planning", help="Limite supérieure de la période du planning pour le chargement des tâches.")
+    name           = fields.Char("Planning", required=True, tracking=True)
+    active         = fields.Boolean('Actif', default=True, tracking=True)
+    tache_ids      = fields.One2many('is.gestion.tache'           , 'planning_id', string="Tâches", tracking=True)
+    affaire_ids    = fields.One2many('is.gestion.tache.affaire'   , 'planning_id', string="Affaires", tracking=True)
+    operateur_ids  = fields.One2many('is.gestion.tache.operateur' , 'planning_id', string="Opérateurs", tracking=True)
+    workcenter_ids = fields.One2many('is.gestion.tache.workcenter', 'planning_id', string="Postes de charge", tracking=True)
+    fermeture_ids  = fields.One2many('is.gestion.tache.fermeture', 'planning_id', string="Fermetures", tracking=True)
+    date_fin_planning = fields.Date(string="Date fin planning", help="Limite supérieure de la période du planning pour le chargement des tâches.", tracking=True)
     type_donnees  = fields.Selection([
         ('operation', 'Opération'),
         ('of', 'OF'),
-    ], string="Type de données", default='operation')
-    workcenter_id = fields.Many2one('mrp.workcenter', 'Poste de charge')
-    affaire       = fields.Char(string="Affaire", help="Filtre sur le nom d'affaire. Vous pouvez saisir plusieurs valeurs séparées par des virgules.")
+    ], string="Type de données", default='operation', tracking=True)
+    workcenter_id = fields.Many2one('mrp.workcenter', 'Poste de charge', tracking=True)
+    affaire       = fields.Char(string="Affaire", help="Filtre sur le nom d'affaire. Vous pouvez saisir plusieurs valeurs séparées par des virgules.", tracking=True)
     is_pret       = fields.Selection([
             ('oui', 'Oui'),
             ('non', 'Non'),
-        ], "Prêt", help="Prêt à produire", default='oui')
+        ], "Prêt", help="Prêt à produire", default='oui', tracking=True)
     tache_count   = fields.Integer(string="Nb tâches", compute="_compute_counts")
 
     def _compute_counts(self):
@@ -153,7 +155,9 @@ class is_gestion_tache_planning(models.Model):
                     -- line.reste duration_hours,
                     line.duree_totale duration_hours,
                     line.heure_debut start_date,
-                    line.employe_id
+                    line.employe_id,
+                    pt.default_code,
+                    mp.product_qty
                 from is_ordre_travail_line line join is_ordre_travail ot on line.ordre_id=ot.id
                                                 join mrp_production mp on ot.production_id=mp.id
                                                 join sale_order so on mp.is_sale_order_id=so.id
@@ -182,8 +186,10 @@ class is_gestion_tache_planning(models.Model):
                     null state,
                     ot.duree_prevue duration_hours,
                     mp.date_planned_start start_date,
-                    mp.is_employe_id employe_id,
-                    mp.is_workcenter_id as workcenter_id
+                    null employe_id,
+                    mp.is_workcenter_id as workcenter_id,
+                    pt.default_code,
+                    mp.product_qty
                 from is_ordre_travail ot join mrp_production mp on ot.production_id=mp.id
                                          join sale_order so on mp.is_sale_order_id=so.id
                                          join product_product pp on mp.product_id=pp.id
@@ -243,22 +249,25 @@ class is_gestion_tache_planning(models.Model):
                 start_date = row['start_date']
                 if start_date< datetime.now():
                     start_date =  datetime.now()
-
                 product = self.env['product.product'].search([('id','=',row['product_id'])])[0]
                 variant = product.product_template_attribute_value_ids._get_combination_name()
-                name = "[%s] %s" % (variant, row.get('product_name'))
+                if self.type_donnees=='operation':
+                    name = "[%s] %s" % (variant, row.get('product_name'))
+                else:
+                    name = "[%s] %s" % (row.get('default_code'), row.get('product_name'))
                 vals={
-                    "name"          : name,
-                    "operator_id"   : row['employe_id']    or default_operator_id,
-                    "workcenter_id" : row['workcenter_id'] or default_workcenter_id,
-                    "affaire_id"    : affaire.id,
-                    "start_date"    : start_date,
-                    "duration_hours": row['duration_hours'],
-                    "planning_id"   : self.id,
-                    "order_id"   : row['order_id'],
+                    "name"            : name,
+                    "operator_id"     : row['employe_id']    or default_operator_id,
+                    "workcenter_id"   : row['workcenter_id'] or default_workcenter_id,
+                    "affaire_id"      : affaire.id,
+                    "start_date"      : start_date,
+                    "duration_hours"  : row['duration_hours'],
+                    "planning_id"     : self.id,
+                    "order_id"        : row['order_id'],
                     "production_id"   : row['production_id'],
-                    "ordre_travail_id"   : row['ordre_travail_id'],
-                    "operation_id"   : row['operation_id'],
+                    "product_qty"     : row['product_qty'],
+                    "ordre_travail_id": row['ordre_travail_id'],
+                    "operation_id"    : row['operation_id'],
                 }
                 res=self.env['is.gestion.tache'].create(vals)
             #**************************************************************
@@ -673,4 +682,5 @@ class is_gestion_tache(models.Model):
     production_id    = fields.Many2one('mrp.production', string="OF")
     ordre_travail_id = fields.Many2one("is.ordre.travail", "Ordre de travail")
     operation_id     = fields.Many2one("is.ordre.travail.line", "Opération")
+    product_qty      = fields.Float(string="Reste à produire")
 

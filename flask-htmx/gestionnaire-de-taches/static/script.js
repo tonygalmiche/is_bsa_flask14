@@ -789,49 +789,53 @@ document.addEventListener('touchend', function(e) {
 
 // Fonctions pour les infobulles
 function showTooltip(event) {
-    const task = event.target.closest('.task');
-    if (!task) return;
-    
-    // Annuler le timeout précédent si il existe
-    if (tooltipTimeout) {
-        clearTimeout(tooltipTimeout);
-    }
-    
-    // Délai avant affichage de l'infobulle
-    tooltipTimeout = setTimeout(() => {
-        const tooltip = document.getElementById('task-tooltip');
-        const title = task.dataset.title;
-        const affairName = task.dataset.affairName;
-        const operationName = task.dataset.operationName; // <-- ajouté
-        const duration = task.dataset.duration;
-        const startSlot = task.dataset.startSlot;
-        const taskId = task.dataset.taskId;
+        const task = event.target.closest('.task');
+        if (!task) return;
         
-        // Calculer la position du slot (date/heure)
-        const slotInfo = getSlotInfo(parseInt(startSlot));
-        const endSlotInfo = getSlotInfo(parseInt(startSlot) + parseInt(duration) - 1);
-        
-        // Générer l'URL Odoo pour l'affichage dans l'info-bulle
-        let odooUrlHtml = '';
-        if (taskId && window.taskOdooConfig && window.taskOdooConfig.urlTemplate) {
-            const decodedTemplate = decodeHtmlEntities(window.taskOdooConfig.urlTemplate);
-            const taskUrl = decodedTemplate.replace('{}', taskId);
-            odooUrlHtml = `<div><strong>URL Odoo:</strong> <small style="word-break: break-all;">${taskUrl}</small></div>`;
+        // Annuler le timeout précédent si il existe
+        if (tooltipTimeout) {
+            clearTimeout(tooltipTimeout);
         }
         
-        // Remplir le contenu de l'infobulle
-        const titleElement = tooltip.querySelector('.task-tooltip-title');
-        const detailElement = tooltip.querySelector('.task-tooltip-detail');
-        
-        titleElement.textContent = title;
-        detailElement.innerHTML = `
-            ${operationName ? `<div><strong>Opération:</strong> ${operationName}</div>` : ''}
-            ${affairName ? `<div><strong>Affaire:</strong> ${affairName}</div>` : ''}
-            <div><strong>Durée:</strong> ${duration} créneaux</div>
-            <div><strong>Période:</strong> ${slotInfo.date} ${slotInfo.period}${duration > 1 ? ' → ' + endSlotInfo.date + ' ' + endSlotInfo.period : ''}</div>
-        `;
-        
-        // Positionner l'infobulle
+        // Délai avant affichage de l'infobulle
+        tooltipTimeout = setTimeout(() => {
+            const tooltip = document.getElementById('task-tooltip');
+            const title = task.dataset.title;
+            const affairName = task.dataset.affairName;
+            const operationName = task.dataset.operationName; // <-- ajouté
+            const productQty = task.dataset.productQty ? Math.round(parseFloat(task.dataset.productQty)) : null; // <-- arrondi à un entier
+            const employeIdsTxt = task.dataset.employeIdsTxt; // <-- ajouté
+            const duration = task.dataset.duration;
+            const startSlot = task.dataset.startSlot;
+            const taskId = task.dataset.taskId;
+            
+            // Calculer la position du slot (date/heure)
+            const slotInfo = getSlotInfo(parseInt(startSlot));
+            const endSlotInfo = getSlotInfo(parseInt(startSlot) + parseInt(duration) - 1);
+            
+            // Générer l'URL Odoo pour l'affichage dans l'info-bulle
+            let odooUrlHtml = '';
+            if (taskId && window.taskOdooConfig && window.taskOdooConfig.urlTemplate) {
+                const decodedTemplate = decodeHtmlEntities(window.taskOdooConfig.urlTemplate);
+                const taskUrl = decodedTemplate.replace('{}', taskId);
+                odooUrlHtml = `<div><strong>URL Odoo:</strong> <small style="word-break: break-all;">${taskUrl}</small></div>`;
+            }
+            
+            // Remplir le contenu de l'infobulle
+            const titleElement = tooltip.querySelector('.task-tooltip-title');
+            const detailElement = tooltip.querySelector('.task-tooltip-detail');
+            
+            titleElement.textContent = title;
+
+            //    ${operationName ? `<div><strong>Opération:</strong> ${operationName}</div>` : ''}
+
+            detailElement.innerHTML = `
+                ${productQty ? `<div><strong>Reste à produire:</strong> ${productQty}</div>` : ''}
+                ${employeIdsTxt ? `<div><strong>Opérateurs:</strong> ${employeIdsTxt}</div>` : ''}
+                ${affairName ? `<div><strong>Affaire:</strong> ${affairName}</div>` : ''}
+                <div><strong>Durée:</strong> ${duration} créneaux</div>
+                <div><strong>Période:</strong> ${slotInfo.date} ${slotInfo.period}${duration > 1 ? ' → ' + endSlotInfo.date + ' ' + endSlotInfo.period : ''}</div>
+            `;        // Positionner l'infobulle
         const taskRect = task.getBoundingClientRect();
         const tooltipRect = tooltip.getBoundingClientRect();
         
