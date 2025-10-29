@@ -804,6 +804,7 @@ function showTooltip(event) {
             const affairName = task.dataset.affairName;
             const operationName = task.dataset.operationName; // <-- ajouté
             const productQty = task.dataset.productQty ? Math.round(parseFloat(task.dataset.productQty)) : null; // <-- arrondi à un entier
+            const derniereDataPrevue = task.dataset.derniereDataPrevue; // <-- ajouté
             const employeIdsTxt = task.dataset.employeIdsTxt; // <-- ajouté
             const duration = task.dataset.duration;
             const startSlot = task.dataset.startSlot;
@@ -830,7 +831,7 @@ function showTooltip(event) {
             //    ${operationName ? `<div><strong>Opération:</strong> ${operationName}</div>` : ''}
 
             detailElement.innerHTML = `
-                ${productQty ? `<div><strong>Reste à produire:</strong> ${productQty}</div>` : ''}
+                ${productQty ? `<div><strong>Reste à produire:</strong> ${productQty}${derniereDataPrevue ? ` - ${derniereDataPrevue}` : ''}</div>` : ''}
                 ${employeIdsTxt ? `<div><strong>Opérateurs:</strong> ${employeIdsTxt}</div>` : ''}
                 ${affairName ? `<div><strong>Affaire:</strong> ${affairName}</div>` : ''}
                 <div><strong>Durée:</strong> ${duration} créneaux</div>

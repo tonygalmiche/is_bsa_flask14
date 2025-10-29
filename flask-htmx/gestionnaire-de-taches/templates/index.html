@@ -120,6 +120,7 @@
                                      data-title="{{ task.name | e }}"
                                      data-operation-name="{{ task.operation_name | e }}"
                                      data-product-qty="{{ task.product_qty | e }}"
+                                     data-derniere-date-prevue="{{ task.is_derniere_date_prevue | e }}"
                                      data-employe-ids-txt="{{ task.is_employe_ids_txt | e }}"
                                      data-affair-name="{{ affair.name | e }}"
                                      style="background-color: {{ affair.color }}; 
@@ -135,12 +136,14 @@
                                     <div class="task-content">
                                         <div class="task-title">{{ task.name }}</div>
                                         {% if task.product_qty %}
-                                        <div class="task-quantity">Qt : {{ task.product_qty | round | int }}</div>
+                                        <div class="task-quantity">
+                                            Qt : {{ task.product_qty | round | int }}{% if task.is_derniere_date_prevue %} - 
+                                            Date prévue : {{ task.is_derniere_date_prevue.strftime('%d/%m/%y') if task.is_derniere_date_prevue else '' }}{% endif %}</div>
                                         {% endif %}
                                         {% if task.operation_name %}
                                         <div class="task-operation">{{ task.operation_name }}</div>
                                         {% endif %}
-                                        <div class="task-affair">{{ affair.name }}</div>
+                                        <div class="task-affair">Affaire : {{ affair.name }}</div>
                                     </div>
                                     
                                     <!-- Poignée de redimensionnement -->

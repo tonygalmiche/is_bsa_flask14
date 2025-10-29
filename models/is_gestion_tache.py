@@ -63,11 +63,11 @@ class is_gestion_tache_planning(models.Model):
                 if operation_line and employe and operation_line.employe_id.id != employe.id:
                     operation_line.write({'employe_id': employe.id})
                     updated_lines += 1
-            else:
-                production = t.production_id
-                if production and employe:
-                    production.is_employe_id = employe.id 
-                    updated_lines += 1
+            # else:
+            #     production = t.production_id
+            #     if production and employe:
+            #         production.is_employe_id = employe.id 
+            #         updated_lines += 1
         return updated_lines
 
 
@@ -157,12 +157,14 @@ class is_gestion_tache_planning(models.Model):
                     line.heure_debut start_date,
                     line.employe_id,
                     pt.default_code,
-                    mp.product_qty
+                    mp.product_qty,
+                    sol.is_derniere_date_prevue
                 from is_ordre_travail_line line join is_ordre_travail ot on line.ordre_id=ot.id
                                                 join mrp_production mp on ot.production_id=mp.id
                                                 join sale_order so on mp.is_sale_order_id=so.id
                                                 join product_product pp on mp.product_id=pp.id
                                                 join product_template pt on pp.product_tmpl_id=pt.id
+                                                 left join sale_order_line sol on mp.is_sale_order_line_id=sol.id
                 where line.state not in ('annule','termine')
                     and ot.state!='termine'
                     and mp.state not in  ('cancer','done')
@@ -189,11 +191,13 @@ class is_gestion_tache_planning(models.Model):
                     null employe_id,
                     mp.is_workcenter_id as workcenter_id,
                     pt.default_code,
-                    mp.product_qty
+                    mp.product_qty,
+                    sol.is_derniere_date_prevue
                 from is_ordre_travail ot join mrp_production mp on ot.production_id=mp.id
                                          join sale_order so on mp.is_sale_order_id=so.id
                                          join product_product pp on mp.product_id=pp.id
                                          join product_template pt on pp.product_tmpl_id=pt.id
+                                         left join sale_order_line sol on mp.is_sale_order_line_id=sol.id
 
                 where so.id>0
                     -- and line.state not in ('annule','termine')
@@ -268,6 +272,7 @@ class is_gestion_tache_planning(models.Model):
                     "product_qty"     : row['product_qty'],
                     "ordre_travail_id": row['ordre_travail_id'],
                     "operation_id"    : row['operation_id'],
+                    "is_derniere_date_prevue": row['is_derniere_date_prevue']
                 }
                 res=self.env['is.gestion.tache'].create(vals)
             #**************************************************************
@@ -291,72 +296,31 @@ class is_gestion_tache_planning(models.Model):
         for planning in self:
             # Supprimer les fermetures existantes de ce planning
             planning.fermeture_ids.unlink()
-
-            # Déterminer la liste des employés cibles
-            employee_ids = planning.operateur_ids.mapped('operator_id')
-            if not employee_ids and planning.workcenter_id:
-                employee_ids = self.env['hr.employee'].search([
-                    ('is_workcenter_id', '=', planning.workcenter_id.id)
-                ])
-
-            if not employee_ids:
-                continue
-
             vals_list = []
-            # Set pour éviter les doublons (opérateur, jour)
-            fermeture_keys = set()
 
-            # 1) Récupérer toutes les absences (is.absence) des employés cibles
-            absences = self.env['is.absence'].search([
-                ('employe_id', 'in', employee_ids.ids),
-            ])
-            for absn in absences:
-                # Déterminer la plage de dates (par jour) couverte par l'absence
-                start_dt = absn.date_debut
-                end_dt = absn.date_fin
-                if not start_dt or not end_dt or start_dt >= end_dt:
-                    continue
 
-                # Fin exclusive => soustraire 1 seconde pour inclure le dernier jour
-                last_day = (end_dt - timedelta(seconds=1)).date()
-                cur_day = start_dt.date()
-
-                # Intitulé = motif [+ commentaire]
-                intitule = absn.motif_id.name or 'Absence'
-                if absn.commentaire:
-                    intitule = f"{intitule} - {absn.commentaire}"
-
-                while cur_day <= last_day:
-                    key = (absn.employe_id.id, cur_day)
-                    if key not in fermeture_keys:
-                        vals_list.append({
-                            'planning_id': planning.id,
-                            'operator_id': absn.employe_id.id,
-                            'date_fermeture': cur_day,
-                            'intitule': intitule,
-                        })
-                        fermeture_keys.add(key)
-                    cur_day = cur_day + timedelta(days=1)
-
-            # 2) Récupérer les fermetures issues des calendriers (resource.calendar.leaves)
-            # Associer chaque employé à son calendrier
-            employees_by_calendar = {}
-            calendar_ids = set()
-            for emp in employee_ids:
-                cal = emp.resource_calendar_id
-                if cal:
-                    employees_by_calendar.setdefault(cal.id, []).append(emp)
-                    calendar_ids.add(cal.id)
-
-            if calendar_ids:
-                # Chercher toutes les fermetures pour ces calendriers
-                calendar_leaves = self.env['resource.calendar.leaves'].search([
-                    ('calendar_id', 'in', list(calendar_ids)),
+            if planning.type_donnees=='of':
+                conges = self.env['resource.calendar.leaves'].search([
+                    ('workcenter_id', '=', False),
+                    ('resource_id', '=', False),
                 ])
+                print('TEST 1',conges)
+                workcenters = self.env['mrp.workcenter'].search([
+                    ('is_gestion_tache', '=', True),
+                ])
+                for workcenter in workcenters:
+                    res = self.env['resource.calendar.leaves'].search([
+                        ('workcenter_id', '=', workcenter.id),
+                    ])
+                    print('TEST 2',workcenter,res)
+                    conges+=res
+                print('TEST 3',conges)
 
-                for leave in calendar_leaves:
-                    start_dt = leave.date_from
-                    end_dt = leave.date_to
+                # Créer les fermetures à partir des congés
+                fermeture_keys = set()
+                for conge in conges:
+                    start_dt = conge.date_from
+                    end_dt = conge.date_to
                     if not start_dt or not end_dt or start_dt >= end_dt:
                         continue
 
@@ -364,26 +328,127 @@ class is_gestion_tache_planning(models.Model):
                     last_day = (end_dt - timedelta(seconds=1)).date()
                     cur_day = start_dt.date()
 
-                    # Intitulé depuis le calendrier
-                    intitule = leave.name or 'Fermeture calendrier'
+                    # Intitulé depuis le congé
+                    intitule = conge.name or 'Fermeture'
 
-                    # Pour tous les employés rattachés à ce calendrier
-                    emps = employees_by_calendar.get(leave.calendar_id.id, [])
-                    if not emps:
+                    # Déterminer le workcenter_id
+                    workcenter_id = None
+                    if conge.workcenter_id:
+                        workcenter_id = conge.workcenter_id.id
+                    
+                    while cur_day <= last_day:
+                        # Clé unique pour éviter les doublons (workcenter, jour)
+                        key = (workcenter_id, cur_day)
+                        if key not in fermeture_keys:
+                            vals_list.append({
+                                'planning_id': planning.id,
+                                'operator_id': None,  # Pas d'opérateur spécifique pour les OF
+                                'workcenter_id': workcenter_id,
+                                'date_fermeture': cur_day,
+                                'intitule': intitule,
+                            })
+                            fermeture_keys.add(key)
+                        cur_day = cur_day + timedelta(days=1)
+
+
+
+
+
+
+            if planning.type_donnees=='operation':
+
+
+                # Déterminer la liste des employés cibles
+                employee_ids = planning.operateur_ids.mapped('operator_id')
+                if not employee_ids and planning.workcenter_id:
+                    employee_ids = self.env['hr.employee'].search([
+                        ('is_workcenter_id', '=', planning.workcenter_id.id)
+                    ])
+
+                if not employee_ids:
+                    continue
+
+                # Set pour éviter les doublons (opérateur, jour)
+                fermeture_keys = set()
+
+                # 1) Récupérer toutes les absences (is.absence) des employés cibles
+                absences = self.env['is.absence'].search([
+                    ('employe_id', 'in', employee_ids.ids),
+                ])
+                for absn in absences:
+                    # Déterminer la plage de dates (par jour) couverte par l'absence
+                    start_dt = absn.date_debut
+                    end_dt = absn.date_fin
+                    if not start_dt or not end_dt or start_dt >= end_dt:
                         continue
 
+                    # Fin exclusive => soustraire 1 seconde pour inclure le dernier jour
+                    last_day = (end_dt - timedelta(seconds=1)).date()
+                    cur_day = start_dt.date()
+
+                    # Intitulé = motif [+ commentaire]
+                    intitule = absn.motif_id.name or 'Absence'
+                    if absn.commentaire:
+                        intitule = f"{intitule} - {absn.commentaire}"
+
                     while cur_day <= last_day:
-                        for emp in emps:
-                            key = (emp.id, cur_day)
-                            if key not in fermeture_keys:
-                                vals_list.append({
-                                    'planning_id': planning.id,
-                                    'operator_id': emp.id,
-                                    'date_fermeture': cur_day,
-                                    'intitule': intitule,
-                                })
-                                fermeture_keys.add(key)
+                        key = (absn.employe_id.id, cur_day)
+                        if key not in fermeture_keys:
+                            vals_list.append({
+                                'planning_id': planning.id,
+                                'operator_id': absn.employe_id.id,
+                                'date_fermeture': cur_day,
+                                'intitule': intitule,
+                            })
+                            fermeture_keys.add(key)
                         cur_day = cur_day + timedelta(days=1)
+
+                # 2) Récupérer les fermetures issues des calendriers (resource.calendar.leaves)
+                # Associer chaque employé à son calendrier
+                employees_by_calendar = {}
+                calendar_ids = set()
+                for emp in employee_ids:
+                    cal = emp.resource_calendar_id
+                    if cal:
+                        employees_by_calendar.setdefault(cal.id, []).append(emp)
+                        calendar_ids.add(cal.id)
+
+                if calendar_ids:
+                    # Chercher toutes les fermetures pour ces calendriers
+                    calendar_leaves = self.env['resource.calendar.leaves'].search([
+                        ('calendar_id', 'in', list(calendar_ids)),
+                    ])
+
+                    for leave in calendar_leaves:
+                        start_dt = leave.date_from
+                        end_dt = leave.date_to
+                        if not start_dt or not end_dt or start_dt >= end_dt:
+                            continue
+
+                        # Fin exclusive => soustraire 1 seconde pour inclure le dernier jour
+                        last_day = (end_dt - timedelta(seconds=1)).date()
+                        cur_day = start_dt.date()
+
+                        # Intitulé depuis le calendrier
+                        intitule = leave.name or 'Fermeture calendrier'
+
+                        # Pour tous les employés rattachés à ce calendrier
+                        emps = employees_by_calendar.get(leave.calendar_id.id, [])
+                        if not emps:
+                            continue
+
+                        while cur_day <= last_day:
+                            for emp in emps:
+                                key = (emp.id, cur_day)
+                                if key not in fermeture_keys:
+                                    vals_list.append({
+                                        'planning_id': planning.id,
+                                        'operator_id': emp.id,
+                                        'date_fermeture': cur_day,
+                                        'intitule': intitule,
+                                    })
+                                    fermeture_keys.add(key)
+                            cur_day = cur_day + timedelta(days=1)
 
             if vals_list:
                 self.env['is.gestion.tache.fermeture'].create(vals_list)
@@ -661,6 +726,7 @@ class is_gestion_tache_fermeture(models.Model):
 
     date_fermeture = fields.Date(string="Date de fermeture", required=True)
     operator_id    = fields.Many2one('hr.employee', string="Opérateur")
+    workcenter_id  = fields.Many2one('mrp.workcenter', string="Poste de charge")
     intitule       = fields.Char(string="Intitulé")
     planning_id    = fields.Many2one('is.gestion.tache.planning', string="Planning", ondelete='cascade')
 
@@ -683,4 +749,5 @@ class is_gestion_tache(models.Model):
     ordre_travail_id = fields.Many2one("is.ordre.travail", "Ordre de travail")
     operation_id     = fields.Many2one("is.ordre.travail.line", "Opération")
     product_qty      = fields.Float(string="Reste à produire")
+    is_derniere_date_prevue = fields.Date("Dernière date prévue")
 

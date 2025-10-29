@@ -210,7 +210,7 @@ def load_tasks_from_db(planning_id=None):
             cr.execute("""
                 SELECT 
                     t.id, t.name, t.operator_id, t.affaire_id, t.start_date, t.duration_hours,
-                    t.operation_id, t.product_qty, t.production_id,
+                    t.operation_id, t.product_qty, t.production_id, t.is_derniere_date_prevue,
                     l.name AS operation_name,
                     mp.is_employe_ids_txt
                 FROM is_gestion_tache t
@@ -228,8 +228,8 @@ def load_tasks_from_db(planning_id=None):
                     t.id, t.name, 
                     t.workcenter_id as operator_id, 
                     t.affaire_id, t.start_date, t.duration_hours,
-                    t.operation_id, t.product_qty, t.production_id,
-                    '??' AS operation_name,
+                    t.operation_id, t.product_qty, t.production_id, t.is_derniere_date_prevue,
+                    null AS operation_name,
                     mp.is_employe_ids_txt
                 FROM is_gestion_tache t 
                 LEFT JOIN mrp_production mp ON mp.id = t.production_id
@@ -281,7 +281,8 @@ def load_tasks_from_db(planning_id=None):
                     "operation_id": row.get('operation_id'),
                     "operation_name": row.get('operation_name'),
                     "product_qty": row.get('product_qty'),
-                    "is_employe_ids_txt": row.get('is_employe_ids_txt')
+                    "is_employe_ids_txt": row.get('is_employe_ids_txt'),
+                    "is_derniere_date_prevue": row.get('is_derniere_date_prevue')
                 }
                 tasks.append(task)
             
