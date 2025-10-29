@@ -514,14 +514,47 @@ def load_fermetures_from_db(planning_id=None):
         if not conn:
             return
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            # Récupérer les informations du planning pour filtrer selon le type
             cursor.execute(
                 """
-                SELECT date_fermeture, operator_id
-                FROM is_gestion_tache_fermeture
-                WHERE planning_id = %s
+                SELECT type_donnees, workcenter_id 
+                FROM is_gestion_tache_planning 
+                WHERE id = %s
                 """,
                 (planning_id,),
             )
+            planning_info = cursor.fetchone()
+            
+            if not planning_info:
+                return
+            
+            type_donnees = planning_info.get('type_donnees')
+            planning_workcenter_id = planning_info.get('workcenter_id')
+            
+            # Construire la requête selon le type de planning
+            if type_donnees == 'of' and planning_workcenter_id:
+                # Pour les plannings OF, ne charger que les fermetures pour le workcenter spécifique
+                # ou les fermetures générales (sans workcenter_id)
+                cursor.execute(
+                    """
+                    SELECT date_fermeture, operator_id, workcenter_id
+                    FROM is_gestion_tache_fermeture
+                    WHERE planning_id = %s 
+                    AND (workcenter_id = %s OR workcenter_id IS NULL)
+                    """,
+                    (planning_id, planning_workcenter_id),
+                )
+            else:
+                # Pour les plannings d'opérations, charger toutes les fermetures
+                cursor.execute(
+                    """
+                    SELECT date_fermeture, operator_id, workcenter_id
+                    FROM is_gestion_tache_fermeture
+                    WHERE planning_id = %s
+                    """,
+                    (planning_id,),
+                )
+            
             rows = cursor.fetchall()
 
         conn.close()
@@ -529,37 +562,51 @@ def load_fermetures_from_db(planning_id=None):
         if not rows:
             return
 
-        # Indexer opérateurs pour set absences
-        operator_ids = [op['id'] for op in OPERATORS] if OPERATORS else []
-        operator_set = set(operator_ids)
-        # Préparer map opérateur -> set(date)
-        absences_by_operator = {op_id: set() for op_id in operator_ids}
-        # Map date -> opérateurs ayant fermeture ce jour
+        # Indexer opérateurs/workcenters pour set absences
+        if type_donnees == 'of':
+            # Pour les plannings OF, les "opérateurs" sont en fait des workcenters
+            operator_ids = [op['id'] for op in OPERATORS] if OPERATORS else []
+            operator_set = set(operator_ids)
+            # Pour les plannings OF, les fermetures s'appliquent aux workcenters
+            absences_by_operator = {op_id: set() for op_id in operator_ids}
+        else:
+            # Pour les plannings d'opérations, traitement classique avec les employés
+            operator_ids = [op['id'] for op in OPERATORS] if OPERATORS else []
+            operator_set = set(operator_ids)
+            absences_by_operator = {op_id: set() for op_id in operator_ids}
+        
+        # Map date -> opérateurs/workcenters ayant fermeture ce jour
         operators_by_date = {}
 
         for r in rows:
             d = r['date_fermeture']
             op_id = r.get('operator_id')
+            workcenter_id = r.get('workcenter_id')
+            
             # Normaliser d en type date
             if isinstance(d, datetime):
                 d = d.date()
             if not isinstance(d, date):
                 continue
 
-            # Indexer par date les opérateurs concernés
+            # Pour les plannings OF, utiliser workcenter_id au lieu d'operator_id
+            if type_donnees == 'of':
+                effective_id = workcenter_id
+            else:
+                effective_id = op_id
+
+            # Indexer par date les opérateurs/workcenters concernés
             operators_by_date.setdefault(d, set())
-            if op_id is None:
-                # Enregistrement sans opérateur => fermeture globale ce jour
-                # On marque tous les opérateurs comme absents et on tag en congé global
+            if effective_id is None:
+                # Enregistrement sans opérateur/workcenter => fermeture globale ce jour
                 if operator_ids:
                     for oid in operator_ids:
                         absences_by_operator.setdefault(oid, set()).add(d)
-                # Tag global (sera transformé en AM/PM ci-dessous)
                 operators_by_date[d] = set(operator_ids) if operator_ids else {None}
             else:
-                operators_by_date[d].add(op_id)
-                if op_id in absences_by_operator:
-                    absences_by_operator[op_id].add(d)
+                operators_by_date[d].add(effective_id)
+                if effective_id in absences_by_operator:
+                    absences_by_operator[effective_id].add(d)
 
         # Renseigner absences sur OPERATORS en AM/PM
         for op in OPERATORS:
@@ -569,11 +616,11 @@ def load_fermetures_from_db(planning_id=None):
                 abs_halfdays.extend(_halfday_datetimes(day))
             op['absences'] = abs_halfdays
 
-        # Calcul des jours de congé global: jours couverts pour tous les opérateurs
+        # Calcul des jours de congé global: jours couverts pour tous les opérateurs/workcenters
         global_vacation_dates = []
         for d, ops in operators_by_date.items():
             if not operator_set:
-                # S'il n'y a pas d'opérateurs chargés, considérer les jours sans opérateur comme globaux
+                # S'il n'y a pas d'opérateurs/workcenters chargés, considérer les jours sans ID comme globaux
                 if ops == {None}:
                     global_vacation_dates.extend(_halfday_datetimes(d))
             else:
