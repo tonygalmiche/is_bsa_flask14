@@ -152,13 +152,13 @@ class is_gestion_tache_planning(models.Model):
                     line.workcenter_id,
                     line.name line_name,
                     line.state,
-                    -- line.reste duration_hours,
                     line.duree_totale duration_hours,
                     line.heure_debut start_date,
                     line.employe_id,
                     pt.default_code,
                     mp.product_qty,
-                    sol.is_derniere_date_prevue
+                    sol.is_derniere_date_prevue,
+                    ot.duree_planifiee
                 from is_ordre_travail_line line join is_ordre_travail ot on line.ordre_id=ot.id
                                                 join mrp_production mp on ot.production_id=mp.id
                                                 join sale_order so on mp.is_sale_order_id=so.id
@@ -186,13 +186,14 @@ class is_gestion_tache_planning(models.Model):
                     null ordre_id,
                     null line_name,
                     null state,
-                    ot.duree_prevue duration_hours,
                     mp.date_planned_start start_date,
                     null employe_id,
                     mp.is_workcenter_id as workcenter_id,
                     pt.default_code,
                     mp.product_qty,
-                    sol.is_derniere_date_prevue
+                    sol.is_derniere_date_prevue,
+                    ot.duree_prevue,
+                    ot.duree_planifiee
                 from is_ordre_travail ot join mrp_production mp on ot.production_id=mp.id
                                          join sale_order so on mp.is_sale_order_id=so.id
                                          join product_product pp on mp.product_id=pp.id
@@ -257,15 +258,17 @@ class is_gestion_tache_planning(models.Model):
                 variant = product.product_template_attribute_value_ids._get_combination_name()
                 if self.type_donnees=='operation':
                     name = "[%s] %s" % (variant, row.get('product_name'))
+                    duration_hours = row.get('duration_hours')
                 else:
                     name = "[%s] %s" % (row.get('default_code'), row.get('product_name'))
+                    duration_hours = row.get('duree_planifiee') or row.get('duree_prevue') 
                 vals={
                     "name"            : name,
                     "operator_id"     : row['employe_id']    or default_operator_id,
                     "workcenter_id"   : row['workcenter_id'] or default_workcenter_id,
                     "affaire_id"      : affaire.id,
                     "start_date"      : start_date,
-                    "duration_hours"  : row['duration_hours'],
+                    "duration_hours"  : duration_hours,
                     "planning_id"     : self.id,
                     "order_id"        : row['order_id'],
                     "production_id"   : row['production_id'],
@@ -297,14 +300,11 @@ class is_gestion_tache_planning(models.Model):
             # Supprimer les fermetures existantes de ce planning
             planning.fermeture_ids.unlink()
             vals_list = []
-
-
             if planning.type_donnees=='of':
                 conges = self.env['resource.calendar.leaves'].search([
                     ('workcenter_id', '=', False),
                     ('resource_id', '=', False),
                 ])
-                print('TEST 1',conges)
                 workcenters = self.env['mrp.workcenter'].search([
                     ('is_gestion_tache', '=', True),
                 ])
@@ -312,9 +312,7 @@ class is_gestion_tache_planning(models.Model):
                     res = self.env['resource.calendar.leaves'].search([
                         ('workcenter_id', '=', workcenter.id),
                     ])
-                    print('TEST 2',workcenter,res)
                     conges+=res
-                print('TEST 3',conges)
 
                 # Créer les fermetures à partir des congés
                 fermeture_keys = set()
@@ -533,6 +531,8 @@ class is_gestion_tache_planning(models.Model):
             date_planned_start_new = heure_debut_operation_modifiee
             if self.type_donnees=='of':
                 production.is_workcenter_id = productions[production].workcenter_id.id
+                duree_planifiee = productions[production].duration_hours
+                production.is_ordre_travail_id.duree_planifiee = duree_planifiee
             if self.type_donnees=='operation':
                 heure_debut_operation_actuelle = productions[production].operation_id.heure_debut
                 date_planned_start_of_actuelle =  production.date_planned_start
