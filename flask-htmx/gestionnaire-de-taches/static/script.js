@@ -834,7 +834,7 @@ function showTooltip(event) {
             detailElement.innerHTML = `
                 ${productQty ? `<div><strong>Reste à produire:</strong> ${productQty}${derniereDataPrevue ? ` - ${derniereDataPrevue}` : ''}</div>` : ''}
                 ${employeIdsTxt ? `<div><strong>Opérateurs:</strong> ${employeIdsTxt}</div>` : ''}
-                ${composantsNonDisponibles ? `<div><strong>Composants non disponibles:</strong> ${composantsNonDisponibles}</div>` : ''}
+                ${composantsNonDisponibles && composantsNonDisponibles !== 'None' && composantsNonDisponibles !== 'False' && composantsNonDisponibles.trim() !== '' ? `<div><strong>Composants non disponibles:</strong> ${composantsNonDisponibles}</div>` : ''}
                 ${affairName ? `<div><strong>Affaire:</strong> ${affairName}</div>` : ''}
                 <div><strong>Durée:</strong> ${duration} créneaux</div>
                 <div><strong>Période:</strong> ${slotInfo.date} ${slotInfo.period}${duration > 1 ? ' → ' + endSlotInfo.date + ' ' + endSlotInfo.period : ''}</div>

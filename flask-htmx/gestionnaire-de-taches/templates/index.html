@@ -111,7 +111,7 @@
                                 {% for task in tasks %}
                                 {% if task.operator_id == operator.id %}
                                 {% set affair = affairs|selectattr("id", "equalto", task.affaire_id)|first %}
-                                <div class="task" 
+                                <div class="task{% if task.is_composants_non_disponibles and task.is_composants_non_disponibles != 'None' and task.is_composants_non_disponibles != 'False' and task.is_composants_non_disponibles|string|trim != '' %} task-missing-components{% endif %}" 
                                      data-task-id="{{ task.id }}"
                                      data-operator-id="{{ task.operator_id }}"
                                      data-start-slot="{{ task.start_slot }}"

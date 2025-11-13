@@ -476,6 +476,21 @@ h1 {
     z-index: 30;
 }
 
+/* Tâches avec composants non disponibles - bordure rouge épaisse */
+.task.task-missing-components {
+    border: 3px solid #dc3545 !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2), 0 0 0 1px #dc3545;
+}
+
+.task.task-missing-components:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3), 0 0 0 1px #dc3545;
+}
+
+.task.task-missing-components.selected {
+    border: 3px solid #dc3545 !important;
+    box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.8), 0 4px 8px rgba(0,0,0,0.3);
+}
+
 .task.dragging {
     opacity: 0.7;
     transform: rotate(2deg);
