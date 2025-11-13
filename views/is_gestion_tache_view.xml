@@ -223,7 +223,9 @@
                     <field name="operator_id"/>
                     <field name="workcenter_id"/>
                     <field name="affaire_id"/>
-                    <field name="start_date"/>
+                    <field name="order_id"/>
+                    <field name="production_id"/>
+                    <field name="ordre_travail_id"/>
                     <separator/>
                     <group expand="0" string="Grouper par">
                         <filter string="Opérateur" name="group_operator" context="{'group_by': 'operator_id'}"/>

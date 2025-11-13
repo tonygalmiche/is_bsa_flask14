@@ -806,6 +806,7 @@ function showTooltip(event) {
             const productQty = task.dataset.productQty ? Math.round(parseFloat(task.dataset.productQty)) : null; // <-- arrondi à un entier
             const derniereDataPrevue = task.dataset.derniereDataPrevue; // <-- ajouté
             const employeIdsTxt = task.dataset.employeIdsTxt; // <-- ajouté
+            const composantsNonDisponibles = task.dataset.composantsNonDisponibles; // <-- NOUVEAU
             const duration = task.dataset.duration;
             const startSlot = task.dataset.startSlot;
             const taskId = task.dataset.taskId;
@@ -833,6 +834,7 @@ function showTooltip(event) {
             detailElement.innerHTML = `
                 ${productQty ? `<div><strong>Reste à produire:</strong> ${productQty}${derniereDataPrevue ? ` - ${derniereDataPrevue}` : ''}</div>` : ''}
                 ${employeIdsTxt ? `<div><strong>Opérateurs:</strong> ${employeIdsTxt}</div>` : ''}
+                ${composantsNonDisponibles ? `<div><strong>Composants non disponibles:</strong> ${composantsNonDisponibles}</div>` : ''}
                 ${affairName ? `<div><strong>Affaire:</strong> ${affairName}</div>` : ''}
                 <div><strong>Durée:</strong> ${duration} créneaux</div>
                 <div><strong>Période:</strong> ${slotInfo.date} ${slotInfo.period}${duration > 1 ? ' → ' + endSlotInfo.date + ' ' + endSlotInfo.period : ''}</div>

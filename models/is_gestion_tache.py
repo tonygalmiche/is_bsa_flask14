@@ -527,20 +527,23 @@ class is_gestion_tache_planning(models.Model):
                     productions[task.production_id]=task
 
         for production in productions:
-            heure_debut_operation_modifiee = productions[production].start_date
-            date_planned_start_new = heure_debut_operation_modifiee
-            if self.type_donnees=='of':
-                production.is_workcenter_id = productions[production].workcenter_id.id
-                duree_planifiee = productions[production].duration_hours
-                production.is_ordre_travail_id.duree_planifiee = duree_planifiee
-            if self.type_donnees=='operation':
-                heure_debut_operation_actuelle = productions[production].operation_id.heure_debut
-                date_planned_start_of_actuelle =  production.date_planned_start
-                if heure_debut_operation_actuelle and date_planned_start_of_actuelle:
-                    delta = heure_debut_operation_actuelle - date_planned_start_of_actuelle
-                    #La nouvelle heure de début de l'OF est égale à la nouvelle heure de l'opération moins ce delta
-                    date_planned_start_new = heure_debut_operation_modifiee - delta
-            production.date_planned_start = date_planned_start_new
+            if production.state not in ['done','cancel']:
+                heure_debut_operation_modifiee = productions[production].start_date
+                date_planned_start_new = heure_debut_operation_modifiee
+                if self.type_donnees=='of':
+                    production.is_workcenter_id = productions[production].workcenter_id.id
+                    duree_planifiee = productions[production].duration_hours
+                    production.is_ordre_travail_id.duree_planifiee = duree_planifiee
+                if self.type_donnees=='operation':
+                    heure_debut_operation_actuelle = productions[production].operation_id.heure_debut
+                    date_planned_start_of_actuelle =  production.date_planned_start
+                    if heure_debut_operation_actuelle and date_planned_start_of_actuelle:
+                        delta = heure_debut_operation_actuelle - date_planned_start_of_actuelle
+                        #La nouvelle heure de début de l'OF est égale à la nouvelle heure de l'opération moins ce delta
+                        date_planned_start_new = heure_debut_operation_modifiee - delta
+
+                print(production.name, production.state)
+                production.date_planned_start = date_planned_start_new
             
       
         # Mettre à jour l'employé sur les opérations liées aux tâches

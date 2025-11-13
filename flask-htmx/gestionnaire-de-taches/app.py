@@ -212,7 +212,9 @@ def load_tasks_from_db(planning_id=None):
                     t.id, t.name, t.operator_id, t.affaire_id, t.start_date, t.duration_hours,
                     t.operation_id, t.product_qty, t.production_id, t.is_derniere_date_prevue,
                     l.name AS operation_name,
-                    mp.is_employe_ids_txt
+                    mp.is_employe_ids_txt,
+                    mp.is_composants_non_disponibles,
+                    mp.name AS production_name
                 FROM is_gestion_tache t
                 LEFT JOIN is_ordre_travail_line l ON l.id = t.operation_id
                 LEFT JOIN mrp_production mp ON mp.id = t.production_id
@@ -230,7 +232,9 @@ def load_tasks_from_db(planning_id=None):
                     t.affaire_id, t.start_date, t.duration_hours,
                     t.operation_id, t.product_qty, t.production_id, t.is_derniere_date_prevue,
                     null AS operation_name,
-                    mp.is_employe_ids_txt
+                    mp.is_employe_ids_txt,
+                    mp.is_composants_non_disponibles,
+                    mp.name AS production_name
                 FROM is_gestion_tache t 
                 LEFT JOIN mrp_production mp ON mp.id = t.production_id
                 WHERE t.planning_id = %s
@@ -282,7 +286,9 @@ def load_tasks_from_db(planning_id=None):
                     "operation_name": row.get('operation_name'),
                     "product_qty": row.get('product_qty'),
                     "is_employe_ids_txt": row.get('is_employe_ids_txt'),
-                    "is_derniere_date_prevue": row.get('is_derniere_date_prevue')
+                    "is_derniere_date_prevue": row.get('is_derniere_date_prevue'),
+                    "is_composants_non_disponibles": row.get('is_composants_non_disponibles'),
+                    "production_name": row.get('production_name')
                 }
                 tasks.append(task)
             
