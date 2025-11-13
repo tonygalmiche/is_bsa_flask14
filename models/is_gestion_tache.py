@@ -739,12 +739,36 @@ class is_gestion_tache(models.Model):
     _description='Gestion des tâches dans Odoo avec interface en Flask / HTMX'
     _order='name'
 
+    @api.depends('start_date', 'duration_hours')
+    def _compute_end_date(self):
+        for obj in self:
+            end_date = False
+            if obj.start_date and obj.duration_hours:
+                # Calculer end_date basé sur les slots (fin calendaire)
+                # DAY_DURATION_HOURS = 7 heures de travail par jour
+                # HALF_DAY_HOURS = 3.5 heures de travail par slot
+                # 1 journée = 24 heures calendaires = 2 slots
+                # 1 slot = 12 heures calendaires
+                DAY_DURATION_HOURS = 7.0  # Heures de travail par jour
+                HALF_DAY_HOURS = DAY_DURATION_HOURS / 2  # 3.5 heures de travail par slot
+                SLOT_CALENDAR_HOURS = 12.0  # Heures calendaires par slot (24h / 2 slots)
+                
+                # Convertir duration_hours en nombre de slots (arrondi au supérieur)
+                import math
+                duration_slots = int(math.ceil(obj.duration_hours / HALF_DAY_HOURS))
+                
+                # Calculer la fin calendaire basée sur les slots
+                # Chaque slot occupe 12 heures calendaires
+                end_date = obj.start_date + timedelta(hours=duration_slots * SLOT_CALENDAR_HOURS)
+            obj.end_date = end_date
+
     name           = fields.Char("Tache", required=True)
     operator_id    = fields.Many2one('hr.employee', string="Opérateur")
     workcenter_id  = fields.Many2one('mrp.workcenter', string="Poste de charge")
     affaire_id     = fields.Many2one('is.gestion.tache.affaire', string="Affaire", required=False)
     start_date     = fields.Datetime(string="Date de début", required=True)
     duration_hours = fields.Float(string="Durée (heures)", required=True)
+    end_date       = fields.Datetime(string="Date de fin", compute='_compute_end_date', store=True, readonly=True)
     planning_id    = fields.Many2one('is.gestion.tache.planning', string="Planning", ondelete='cascade')
 
     order_id         = fields.Many2one('sale.order', string="Commande")

@@ -209,12 +209,13 @@ def load_tasks_from_db(planning_id=None):
         if type_donnees=='operation':
             cr.execute("""
                 SELECT 
-                    t.id, t.name, t.operator_id, t.affaire_id, t.start_date, t.duration_hours,
+                    t.id, t.name, t.operator_id, t.affaire_id, t.start_date, t.duration_hours, t.end_date,
                     t.operation_id, t.product_qty, t.production_id, t.is_derniere_date_prevue,
                     l.name AS operation_name,
                     mp.is_employe_ids_txt,
                     mp.is_composants_non_disponibles,
-                    mp.name AS production_name
+                    mp.name AS production_name,
+                    mp.is_date_prevue
                 FROM is_gestion_tache t
                 LEFT JOIN is_ordre_travail_line l ON l.id = t.operation_id
                 LEFT JOIN mrp_production mp ON mp.id = t.production_id
@@ -229,12 +230,13 @@ def load_tasks_from_db(planning_id=None):
                 SELECT 
                     t.id, t.name, 
                     t.workcenter_id as operator_id, 
-                    t.affaire_id, t.start_date, t.duration_hours,
+                    t.affaire_id, t.start_date, t.duration_hours, t.end_date,
                     t.operation_id, t.product_qty, t.production_id, t.is_derniere_date_prevue,
                     null AS operation_name,
                     mp.is_employe_ids_txt,
                     mp.is_composants_non_disponibles,
-                    mp.name AS production_name
+                    mp.name AS production_name,
+                    mp.is_date_prevue
                 FROM is_gestion_tache t 
                 LEFT JOIN mrp_production mp ON mp.id = t.production_id
                 WHERE t.planning_id = %s
@@ -274,6 +276,17 @@ def load_tasks_from_db(planning_id=None):
                 # Convertir en datetime naïf (sans timezone) pour compatibilité avec le reste du code
                 adjusted_start_date = adjusted_start_date.replace(tzinfo=None)
                 
+                # Traiter end_date de la même manière
+                end_date_converted = None
+                if row.get('end_date'):
+                    end_date_utc = row['end_date']
+                    if end_date_utc.tzinfo is None:
+                        end_date_utc = utc_tz.localize(end_date_utc)
+                    elif end_date_utc.tzinfo != utc_tz:
+                        end_date_utc = end_date_utc.astimezone(utc_tz)
+                    end_date_paris = end_date_utc.astimezone(paris_tz)
+                    end_date_converted = end_date_paris.replace(tzinfo=None)
+                
                 # Convertir les données de la base vers le format attendu par l'application
                 task = {
                     "id": str(row['id']),  # Convertir en string pour compatibilité
@@ -288,8 +301,25 @@ def load_tasks_from_db(planning_id=None):
                     "is_employe_ids_txt": row.get('is_employe_ids_txt'),
                     "is_derniere_date_prevue": row.get('is_derniere_date_prevue'),
                     "is_composants_non_disponibles": row.get('is_composants_non_disponibles'),
-                    "production_name": row.get('production_name')
+                    "production_name": row.get('production_name'),
+                    "is_date_prevue": row.get('is_date_prevue'),
+                    "end_date": end_date_converted
                 }
+                
+                # Debug : afficher les 3 premières tâches
+                if i < 3:
+                    print(f"\n=== DEBUG TASK {i+1} ===")
+                    print(f"ID: {task['id']}, Name: {task['name']}")
+                    print(f"end_date: {end_date_converted} (type: {type(end_date_converted)})")
+                    print(f"is_derniere_date_prevue: {row.get('is_derniere_date_prevue')} (type: {type(row.get('is_derniere_date_prevue'))})")
+                    print(f"is_date_prevue (OF): {row.get('is_date_prevue')} (type: {type(row.get('is_date_prevue'))})")
+                    if end_date_converted and row.get('is_date_prevue'):
+                        end_date_only = end_date_converted.date() if isinstance(end_date_converted, datetime) else end_date_converted
+                        date_prevue_of = row.get('is_date_prevue')
+                        print(f"Comparaison: {end_date_only} > {date_prevue_of} = {end_date_only > date_prevue_of}")
+                        if end_date_only > date_prevue_of:
+                            print(">>> TÂCHE EN RETARD ! <<<")
+                
                 tasks.append(task)
             
             cr.close()
@@ -410,6 +440,16 @@ def update_task_in_database(task_id, operator_id, start_date, duration_hours):
         # Convertir vers UTC pour stockage en base
         start_date_utc = start_date_paris.astimezone(utc_tz)
         
+        # Calculer end_date basé sur les slots (fin calendaire)
+        # Convertir duration_hours en slots, puis calculer la date de fin du dernier slot
+        # 1 journée = 24 heures calendaires = 2 slots
+        # 1 slot = 12 heures calendaires
+        duration_slots = hours_to_slots(duration_hours)
+        SLOT_CALENDAR_HOURS = 12.0  # Heures calendaires par slot (24h / 2 slots)
+        
+        # Calculer la fin calendaire en ajoutant le nombre de slots en heures calendaires
+        end_date_utc = start_date_utc + timedelta(hours=duration_slots * SLOT_CALENDAR_HOURS)
+        
         # Déterminer le champ à mettre à jour selon le type de données
         type_donnees = get_current_planning_type_donnees()
         operator_field = "workcenter_id" if type_donnees == 'of' else "operator_id"
@@ -417,9 +457,9 @@ def update_task_in_database(task_id, operator_id, start_date, duration_hours):
         with conn.cursor() as cursor:
             cursor.execute(f"""
                 UPDATE is_gestion_tache 
-                SET {operator_field} = %s, start_date = %s, duration_hours = %s
+                SET {operator_field} = %s, start_date = %s, duration_hours = %s, end_date = %s
                 WHERE id = %s
-            """, (operator_id, start_date_utc, duration_hours, int(task_id)))
+            """, (operator_id, start_date_utc, duration_hours, end_date_utc, int(task_id)))
             
             rows_affected = cursor.rowcount
             conn.commit()
@@ -467,11 +507,21 @@ def update_multiple_tasks_in_database(tasks_data):
                 # Convertir vers UTC pour stockage en base
                 start_date_utc = start_date_paris.astimezone(utc_tz)
                 
+                # Calculer end_date basé sur les slots (fin calendaire)
+                # Convertir duration_hours en slots, puis calculer la date de fin du dernier slot
+                # 1 journée = 24 heures calendaires = 2 slots
+                # 1 slot = 12 heures calendaires
+                duration_slots = hours_to_slots(duration_hours)
+                SLOT_CALENDAR_HOURS = 12.0  # Heures calendaires par slot (24h / 2 slots)
+                
+                # Calculer la fin calendaire en ajoutant le nombre de slots en heures calendaires
+                end_date_utc = start_date_utc + timedelta(hours=duration_slots * SLOT_CALENDAR_HOURS)
+                
                 cursor.execute(f"""
                     UPDATE is_gestion_tache 
-                    SET {operator_field} = %s, start_date = %s, duration_hours = %s
+                    SET {operator_field} = %s, start_date = %s, duration_hours = %s, end_date = %s
                     WHERE id = %s
-                """, (operator_id, start_date_utc, duration_hours, int(task_id)))
+                """, (operator_id, start_date_utc, duration_hours, end_date_utc, int(task_id)))
             
             conn.commit()
             conn.close()

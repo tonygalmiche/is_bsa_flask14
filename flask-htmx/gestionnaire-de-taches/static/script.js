@@ -804,9 +804,19 @@ function showTooltip(event) {
             const affairName = task.dataset.affairName;
             const operationName = task.dataset.operationName; // <-- ajouté
             const productQty = task.dataset.productQty ? Math.round(parseFloat(task.dataset.productQty)) : null; // <-- arrondi à un entier
-            const derniereDataPrevue = task.dataset.derniereDataPrevue; // <-- ajouté
+            const derniereDataPrevue = task.dataset.derniereDataPrevue; // <-- ancienne date prévue (ligne de commande)
+            const datePrevueOf = task.dataset.datePrevueOf; // <-- NOUVEAU : date prévue de l'OF (pour comparaison)
+            const endDate = task.dataset.endDate; // <-- NOUVEAU : date de fin de la tâche
             const employeIdsTxt = task.dataset.employeIdsTxt; // <-- ajouté
+            
+            // Debug : afficher les valeurs récupérées
+            console.log('=== DEBUG TOOLTIP ===');
+            console.log('derniereDataPrevue (ligne commande):', derniereDataPrevue, 'Type:', typeof derniereDataPrevue);
+            console.log('datePrevueOf (OF):', datePrevueOf, 'Type:', typeof datePrevueOf);
+            console.log('endDate:', endDate, 'Type:', typeof endDate);
+            
             const composantsNonDisponibles = task.dataset.composantsNonDisponibles; // <-- NOUVEAU
+            const datePrevue = task.dataset.datePrevue; // <-- Date prévue de l'OF (pour affichage)
             const duration = task.dataset.duration;
             const startSlot = task.dataset.startSlot;
             const taskId = task.dataset.taskId;
@@ -814,6 +824,53 @@ function showTooltip(event) {
             // Calculer la position du slot (date/heure)
             const slotInfo = getSlotInfo(parseInt(startSlot));
             const endSlotInfo = getSlotInfo(parseInt(startSlot) + parseInt(duration) - 1);
+            
+            // Vérifier si la tâche est en retard (end_date > is_date_prevue de l'OF)
+            let isLate = false;
+            let alertMessage = '';
+            if (endDate && endDate !== '' && datePrevueOf && datePrevueOf !== 'None' && datePrevueOf !== 'False' && datePrevueOf.trim() !== '') {
+                console.log('Conditions validées, comparaison des dates...');
+                const endDateTime = new Date(endDate);
+                const datePrevueOfDateTime = new Date(datePrevueOf);
+                console.log('endDateTime:', endDateTime);
+                console.log('datePrevueOfDateTime:', datePrevueOfDateTime);
+                console.log('endDateTime > datePrevueOfDateTime:', endDateTime > datePrevueOfDateTime);
+                
+                if (endDateTime > datePrevueOfDateTime) {
+                    isLate = true;
+                    // Formater les dates pour le message d'alerte
+                    const endDateAlert = endDateTime.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+                    const datePrevueAlert = datePrevueOfDateTime.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+                    alertMessage = `<div style="color: red; font-weight: bold;">⚠️ ALERTE : Date de fin (${endDateAlert}) > Date prévue OF (${datePrevueAlert})</div>`;
+                    console.log('ALERTE: Tâche en retard détectée !');
+                }
+            } else {
+                console.log('Conditions non validées pour la comparaison');
+                console.log('endDate vide?', !endDate || endDate === '');
+                console.log('datePrevueOf vide?', !datePrevueOf || datePrevueOf === 'None' || datePrevueOf === 'False' || datePrevueOf.trim() === '');
+            }
+            
+            // Formater end_date pour l'affichage
+            let endDateFormatted = '';
+            if (endDate && endDate !== '') {
+                const endDateTime = new Date(endDate);
+                endDateFormatted = endDateTime.toLocaleDateString('fr-FR', { 
+                    day: '2-digit', 
+                    month: '2-digit', 
+                    year: '2-digit' 
+                });
+            }
+            
+            // Formater datePrevueOf pour l'affichage
+            let datePrevueOfFormatted = '';
+            if (datePrevueOf && datePrevueOf !== '' && datePrevueOf !== 'None' && datePrevueOf !== 'False') {
+                const datePrevueOfDateTime = new Date(datePrevueOf);
+                datePrevueOfFormatted = datePrevueOfDateTime.toLocaleDateString('fr-FR', { 
+                    day: '2-digit', 
+                    month: '2-digit', 
+                    year: '2-digit' 
+                });
+            }
             
             // Générer l'URL Odoo pour l'affichage dans l'info-bulle
             let odooUrlHtml = '';
@@ -832,7 +889,10 @@ function showTooltip(event) {
             //    ${operationName ? `<div><strong>Opération:</strong> ${operationName}</div>` : ''}
 
             detailElement.innerHTML = `
-                ${productQty ? `<div><strong>Reste à produire:</strong> ${productQty}${derniereDataPrevue ? ` - ${derniereDataPrevue}` : ''}</div>` : ''}
+                ${alertMessage}
+                ${productQty ? `<div><strong>Reste à produire:</strong> ${productQty}${derniereDataPrevue && derniereDataPrevue !== 'None' && derniereDataPrevue !== 'False' && derniereDataPrevue.trim() !== '' ? ` - ${derniereDataPrevue}` : ''}</div>` : ''}
+                ${endDateFormatted ? `<div><strong>Date de fin:</strong> ${endDateFormatted}</div>` : ''}
+                ${datePrevueOfFormatted ? `<div><strong>Date prévue OF:</strong> ${datePrevueOfFormatted}</div>` : ''}
                 ${employeIdsTxt ? `<div><strong>Opérateurs:</strong> ${employeIdsTxt}</div>` : ''}
                 ${composantsNonDisponibles && composantsNonDisponibles !== 'None' && composantsNonDisponibles !== 'False' && composantsNonDisponibles.trim() !== '' ? `<div><strong>Composants non disponibles:</strong> ${composantsNonDisponibles}</div>` : ''}
                 ${affairName ? `<div><strong>Affaire:</strong> ${affairName}</div>` : ''}

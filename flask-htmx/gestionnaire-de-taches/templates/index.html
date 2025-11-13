@@ -111,7 +111,9 @@
                                 {% for task in tasks %}
                                 {% if task.operator_id == operator.id %}
                                 {% set affair = affairs|selectattr("id", "equalto", task.affaire_id)|first %}
-                                <div class="task{% if task.is_composants_non_disponibles and task.is_composants_non_disponibles != 'None' and task.is_composants_non_disponibles != 'False' and task.is_composants_non_disponibles|string|trim != '' %} task-missing-components{% endif %}" 
+                                {# Utiliser is_date_prevue de l'OF pour la comparaison #}
+                                {% set is_late = task.end_date and task.is_date_prevue and task.end_date.date() > task.is_date_prevue %}
+                                <div class="task{% if task.is_composants_non_disponibles and task.is_composants_non_disponibles != 'None' and task.is_composants_non_disponibles != 'False' and task.is_composants_non_disponibles|string|trim != '' %} task-missing-components{% endif %}{% if is_late %} task-late{% endif %}" 
                                      data-task-id="{{ task.id }}"
                                      data-operator-id="{{ task.operator_id }}"
                                      data-start-slot="{{ task.start_slot }}"
@@ -121,8 +123,11 @@
                                      data-operation-name="{{ task.operation_name | e }}"
                                      data-product-qty="{{ task.product_qty | e }}"
                                      data-derniere-date-prevue="{{ task.is_derniere_date_prevue | e }}"
+                                     data-date-prevue-of="{{ task.is_date_prevue.strftime('%Y-%m-%d') if task.is_date_prevue else '' }}"
+                                     data-end-date="{{ task.end_date.strftime('%Y-%m-%d %H:%M:%S') if task.end_date else '' }}"
                                      data-employe-ids-txt="{{ task.is_employe_ids_txt | e }}"
                                      data-composants-non-disponibles="{{ task.is_composants_non_disponibles | e }}"
+                                     data-date-prevue="{{ task.is_date_prevue | e }}"
                                      data-affair-name="{{ affair.name | e }}"
                                      style="background-color: {{ affair.color }}; 
                                             left: calc({{ task.start_slot }} * var(--slot-width)); 
@@ -182,6 +187,25 @@
             urlTemplate: '{{ current_database_url_tache_odoo }}'
         };
         console.log('Configuration tâche Odoo:', window.taskOdooConfig);
+        
+        // Debug : afficher les données des tâches au chargement
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('=== DEBUG TASKS DATA ===');
+            const tasks = document.querySelectorAll('.task');
+            tasks.forEach((task, index) => {
+                if (index < 3) { // Afficher seulement les 3 premières tâches
+                    console.log(`Task ${index + 1}:`, {
+                        id: task.dataset.taskId,
+                        name: task.dataset.title,
+                        endDate: task.dataset.endDate,
+                        derniereDataPrevue: task.dataset.derniereDataPrevue,
+                        datePrevueOf: task.dataset.datePrevueOf,
+                        hasTaskLateClass: task.classList.contains('task-late'),
+                        hasTaskMissingComponentsClass: task.classList.contains('task-missing-components')
+                    });
+                }
+            });
+        });
     </script>
     
     <script src="{{ url_for('static', filename='script.js') }}"></script>

@@ -478,17 +478,32 @@ h1 {
 
 /* Tâches avec composants non disponibles - bordure rouge épaisse */
 .task.task-missing-components {
-    border: 3px solid #dc3545 !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2), 0 0 0 1px #dc3545;
+    border: 3px solid orange !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2), 0 0 0 1px orange;
 }
 
 .task.task-missing-components:hover {
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3), 0 0 0 1px #dc3545;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3), 0 0 0 1px orange;
 }
 
 .task.task-missing-components.selected {
-    border: 3px solid #dc3545 !important;
-    box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.8), 0 4px 8px rgba(0,0,0,0.3);
+    border: 3px solid orange !important;
+    box-shadow: 0 0 0 2px orange, 0 4px 8px rgba(0,0,0,0.3);
+}
+
+/* Style pour les tâches en retard (end_date > derniere_date_prevue) */
+.task.task-late {
+    border: 3px solid #ff0000 !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2), 0 0 0 1px #ff0000;
+}
+
+.task.task-late:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3), 0 0 0 1px #ff0000;
+}
+
+.task.task-late.selected {
+    border: 3px solid #ff0000 !important;
+    box-shadow: 0 0 0 2px rgba(255, 0, 0, 0.8), 0 4px 8px rgba(0,0,0,0.3);
 }
 
 .task.dragging {
