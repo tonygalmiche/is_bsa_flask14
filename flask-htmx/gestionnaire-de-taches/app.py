@@ -305,21 +305,6 @@ def load_tasks_from_db(planning_id=None):
                     "is_date_prevue": row.get('is_date_prevue'),
                     "end_date": end_date_converted
                 }
-                
-                # Debug : afficher les 3 premières tâches
-                if i < 3:
-                    print(f"\n=== DEBUG TASK {i+1} ===")
-                    print(f"ID: {task['id']}, Name: {task['name']}")
-                    print(f"end_date: {end_date_converted} (type: {type(end_date_converted)})")
-                    print(f"is_derniere_date_prevue: {row.get('is_derniere_date_prevue')} (type: {type(row.get('is_derniere_date_prevue'))})")
-                    print(f"is_date_prevue (OF): {row.get('is_date_prevue')} (type: {type(row.get('is_date_prevue'))})")
-                    if end_date_converted and row.get('is_date_prevue'):
-                        end_date_only = end_date_converted.date() if isinstance(end_date_converted, datetime) else end_date_converted
-                        date_prevue_of = row.get('is_date_prevue')
-                        print(f"Comparaison: {end_date_only} > {date_prevue_of} = {end_date_only > date_prevue_of}")
-                        if end_date_only > date_prevue_of:
-                            print(">>> TÂCHE EN RETARD ! <<<")
-                
                 tasks.append(task)
             
             cr.close()

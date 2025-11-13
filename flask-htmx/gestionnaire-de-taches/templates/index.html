@@ -186,26 +186,6 @@
         window.taskOdooConfig = {
             urlTemplate: '{{ current_database_url_tache_odoo }}'
         };
-        console.log('Configuration tâche Odoo:', window.taskOdooConfig);
-        
-        // Debug : afficher les données des tâches au chargement
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('=== DEBUG TASKS DATA ===');
-            const tasks = document.querySelectorAll('.task');
-            tasks.forEach((task, index) => {
-                if (index < 3) { // Afficher seulement les 3 premières tâches
-                    console.log(`Task ${index + 1}:`, {
-                        id: task.dataset.taskId,
-                        name: task.dataset.title,
-                        endDate: task.dataset.endDate,
-                        derniereDataPrevue: task.dataset.derniereDataPrevue,
-                        datePrevueOf: task.dataset.datePrevueOf,
-                        hasTaskLateClass: task.classList.contains('task-late'),
-                        hasTaskMissingComponentsClass: task.classList.contains('task-missing-components')
-                    });
-                }
-            });
-        });
     </script>
     
     <script src="{{ url_for('static', filename='script.js') }}"></script>

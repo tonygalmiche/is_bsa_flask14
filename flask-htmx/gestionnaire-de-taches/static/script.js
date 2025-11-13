@@ -808,13 +808,6 @@ function showTooltip(event) {
             const datePrevueOf = task.dataset.datePrevueOf; // <-- NOUVEAU : date prévue de l'OF (pour comparaison)
             const endDate = task.dataset.endDate; // <-- NOUVEAU : date de fin de la tâche
             const employeIdsTxt = task.dataset.employeIdsTxt; // <-- ajouté
-            
-            // Debug : afficher les valeurs récupérées
-            console.log('=== DEBUG TOOLTIP ===');
-            console.log('derniereDataPrevue (ligne commande):', derniereDataPrevue, 'Type:', typeof derniereDataPrevue);
-            console.log('datePrevueOf (OF):', datePrevueOf, 'Type:', typeof datePrevueOf);
-            console.log('endDate:', endDate, 'Type:', typeof endDate);
-            
             const composantsNonDisponibles = task.dataset.composantsNonDisponibles; // <-- NOUVEAU
             const datePrevue = task.dataset.datePrevue; // <-- Date prévue de l'OF (pour affichage)
             const duration = task.dataset.duration;
@@ -829,12 +822,8 @@ function showTooltip(event) {
             let isLate = false;
             let alertMessage = '';
             if (endDate && endDate !== '' && datePrevueOf && datePrevueOf !== 'None' && datePrevueOf !== 'False' && datePrevueOf.trim() !== '') {
-                console.log('Conditions validées, comparaison des dates...');
                 const endDateTime = new Date(endDate);
                 const datePrevueOfDateTime = new Date(datePrevueOf);
-                console.log('endDateTime:', endDateTime);
-                console.log('datePrevueOfDateTime:', datePrevueOfDateTime);
-                console.log('endDateTime > datePrevueOfDateTime:', endDateTime > datePrevueOfDateTime);
                 
                 if (endDateTime > datePrevueOfDateTime) {
                     isLate = true;
@@ -842,12 +831,7 @@ function showTooltip(event) {
                     const endDateAlert = endDateTime.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
                     const datePrevueAlert = datePrevueOfDateTime.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
                     alertMessage = `<div style="color: red; font-weight: bold;">⚠️ ALERTE : Date de fin (${endDateAlert}) > Date prévue OF (${datePrevueAlert})</div>`;
-                    console.log('ALERTE: Tâche en retard détectée !');
                 }
-            } else {
-                console.log('Conditions non validées pour la comparaison');
-                console.log('endDate vide?', !endDate || endDate === '');
-                console.log('datePrevueOf vide?', !datePrevueOf || datePrevueOf === 'None' || datePrevueOf === 'False' || datePrevueOf.trim() === '');
             }
             
             // Formater end_date pour l'affichage
