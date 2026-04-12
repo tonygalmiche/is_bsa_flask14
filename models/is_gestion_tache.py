@@ -43,6 +43,7 @@ class is_gestion_tache_planning(models.Model):
             ('oui', 'Oui'),
             ('non', 'Non'),
         ], "Prêt", help="Prêt à produire", default='oui', tracking=True)
+    maj_of_auto   = fields.Boolean(string="Mise à jour OF automatique", default=False, tracking=True, help="Si coché, met à jour automatiquement les dates des OF")
     tache_count   = fields.Integer(string="Nb tâches", compute="_compute_counts")
 
     def _compute_counts(self):
@@ -167,7 +168,7 @@ class is_gestion_tache_planning(models.Model):
                                                  left join sale_order_line sol on mp.is_sale_order_line_id=sol.id
                 where line.state not in ('annule','termine')
                     and ot.state!='termine'
-                    and mp.state not in  ('cancer','done')
+                    and mp.state not in  ('cancel','done')
                     and line.workcenter_id=%s
             """
         else:
@@ -203,7 +204,7 @@ class is_gestion_tache_planning(models.Model):
                 where so.id>0
                     -- and line.state not in ('annule','termine')
                     and ot.state!='termine'
-                    and mp.state not in  ('cancer','done')
+                    and mp.state not in  ('cancel','done')
                     -- and line.workcenter_id=%s
             """
         if self.is_pret:
@@ -220,6 +221,9 @@ class is_gestion_tache_planning(models.Model):
                 clauses = ["so.is_nom_affaire ILIKE %s" for _ in terms]
                 SQL += "\n                    and (" + " OR ".join(clauses) + ")\n"
                 params.extend([f"%{t}%" for t in terms])
+
+
+        #print(params,SQL)
 
 
         cr.execute(SQL, params)

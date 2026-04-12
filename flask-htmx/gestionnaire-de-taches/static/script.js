@@ -243,8 +243,9 @@ function handleResize(e) {
         const newDuration = Math.max(1, Math.round(newWidth / slotWidth));
         const currentStartSlot = parseInt(task.dataset.startSlot);
         
-        // S'assurer que la tâche ne dépasse pas la fin du planning (30 slots)
-        const maxDuration = 60 - currentStartSlot; // Augmenté à 60 slots pour correspondre au planning réel
+        // S'assurer que la tâche ne dépasse pas la fin du planning
+        const numSlots = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--num-slots')) || 60;
+        const maxDuration = numSlots - currentStartSlot;
         const finalDuration = Math.min(newDuration, maxDuration);
         
         task.style.width = `calc(${finalDuration} * var(--slot-width) - 2px)`;

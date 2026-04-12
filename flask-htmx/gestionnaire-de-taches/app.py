@@ -8,6 +8,7 @@ import sys
 import os
 import pytz
 import math
+import xmlrpc.client
 
 # # Configuration du chemin Odoo
 # ODOO_PATH = '/opt/odoo14'
@@ -32,6 +33,9 @@ CURRENT_DATABASE_CONFIG = DATABASE_CONFIG.copy()
 CURRENT_DATABASE_NAME = ""
 CURRENT_DATABASE_URL_ODOO = ""
 CURRENT_DATABASE_URL_TACHE_ODOO = ""
+CURRENT_XMLRPC_LOGIN = ""
+CURRENT_XMLRPC_PASSWORD = ""
+CURRENT_XMLRPC_URL = ""
 CURRENT_PLANNING_ID = None
 CURRENT_PLANNING_END_DATE = None  # Date fin planning (date)
 
@@ -54,6 +58,34 @@ NUM_SLOTS = 90  # Par défaut, sera recalculé après sélection d'un planning
 START_DATE =  datetime.now().date()  # Date de début du planning (date du jour par défaut)
 DAY_DURATION_HOURS = 7  # Durée d'une journée en heures
 HALF_DAY_HOURS = DAY_DURATION_HOURS / 2  # Durée d'une demi-journée (AM ou PM)
+
+
+def call_odoo_xmlrpc(model, method, args=None, kwargs=None):
+    """Appelle une méthode sur un modèle Odoo via XML-RPC.
+    Retourne le résultat ou None en cas d'erreur."""
+    if not CURRENT_XMLRPC_URL or not CURRENT_XMLRPC_LOGIN or not CURRENT_XMLRPC_PASSWORD:
+        print("XML-RPC : identifiants non configurés")
+        return None
+    url = CURRENT_XMLRPC_URL.rstrip('/')
+    db_name = CURRENT_DATABASE_CONFIG.get('database', '')
+    try:
+        common = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/common')
+        uid = common.authenticate(db_name, CURRENT_XMLRPC_LOGIN, CURRENT_XMLRPC_PASSWORD, {})
+        if not uid:
+            print("XML-RPC : échec d'authentification")
+            return None
+        models_proxy = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/object')
+        result = models_proxy.execute_kw(
+            db_name, uid, CURRENT_XMLRPC_PASSWORD,
+            model, method,
+            args or [],
+            kwargs or {}
+        )
+        return result
+    except Exception as e:
+        print(f"XML-RPC erreur : {e}")
+        return None
+
 
 # Fonctions de base de données
 def get_db_connection():
@@ -1123,6 +1155,7 @@ def database_selection():
 def select_database(database_id):
     """Sélectionne une base de données et redirige vers la sélection de planning"""
     global CURRENT_DATABASE_CONFIG, CURRENT_DATABASE_NAME, CURRENT_DATABASE_URL_ODOO, CURRENT_DATABASE_URL_TACHE_ODOO
+    global CURRENT_XMLRPC_LOGIN, CURRENT_XMLRPC_PASSWORD, CURRENT_XMLRPC_URL
     
     # Trouver la configuration de la base de données
     selected_db = next((db for db in DATABASES if db['id'] == database_id), None)
@@ -1139,6 +1172,9 @@ def select_database(database_id):
     CURRENT_DATABASE_NAME = selected_db['name']
     CURRENT_DATABASE_URL_ODOO = selected_db.get('url_odoo', '')
     CURRENT_DATABASE_URL_TACHE_ODOO = selected_db.get('url_tache_odoo', '')
+    CURRENT_XMLRPC_LOGIN = selected_db.get('xmlrpc_login', '')
+    CURRENT_XMLRPC_PASSWORD = selected_db.get('xmlrpc_password', '')
+    CURRENT_XMLRPC_URL = selected_db.get('xmlrpc_url', '')
     
     try:
         # Tester la connexion à la base
@@ -1766,10 +1802,28 @@ def reload_data():
     """Recharge à la fois les opérateurs, les affaires et les tâches depuis la base de données"""
     global OPERATORS, AFFAIRES, TASKS, START_DATE, NUM_SLOTS
     try:
-        # # ÉTAPE 1 : Appeler action_maj_fermetures en premier
-        # maj_fermetures_success = False
-        # if CURRENT_PLANNING_ID:
-        #     maj_fermetures_success = call_odoo_action_maj_fermetures(CURRENT_PLANNING_ID)
+        # ÉTAPE 1 : Si maj_of_auto est coché, appeler action_maj_date_of via XML-RPC
+        maj_of_msg = ""
+        if CURRENT_PLANNING_ID:
+            try:
+                conn = get_db_connection()
+                if conn:
+                    with conn.cursor() as cursor:
+                        cursor.execute("SELECT maj_of_auto FROM is_gestion_tache_planning WHERE id = %s", (CURRENT_PLANNING_ID,))
+                        row = cursor.fetchone()
+                        if row and row[0]:
+                            result = call_odoo_xmlrpc(
+                                'is.gestion.tache.planning',
+                                'action_maj_date_of',
+                                [[CURRENT_PLANNING_ID]]
+                            )
+                            if result is not None:
+                                maj_of_msg = " | Maj date OF effectuée"
+                            else:
+                                maj_of_msg = " | Maj date OF échouée"
+                    conn.close()
+            except Exception as e:
+                maj_of_msg = f" | Maj date OF erreur: {e}"
         
         # ÉTAPE 2 : Recharger les opérateurs
         new_operators = load_operators_from_db(CURRENT_PLANNING_ID)
@@ -1799,7 +1853,7 @@ def reload_data():
         
         # Message avec statut des fermetures
         #fermetures_msg = "fermetures mises à jour" if maj_fermetures_success else "fermetures (erreur)"
-        message = f"{operators_count} opérateurs, {affaires_count} affaires, {tasks_count} tâches rechargés"
+        message = f"{operators_count} opérateurs, {affaires_count} affaires, {tasks_count} tâches rechargés{maj_of_msg}"
         
         return jsonify({
             "success": True, 

@@ -41,7 +41,7 @@
                                 <field name="workcenter_id" attrs="{'invisible':[('type_donnees','!=','operation')], 'required':[('type_donnees','==','operation')]}"/>
                                 <field name="affaire"/>
                                 <field name="is_pret"/>
-
+                                <field name="maj_of_auto"/>
                             </group>
                         </group>
                         <notebook>
