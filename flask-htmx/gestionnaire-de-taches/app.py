@@ -9,6 +9,7 @@ import os
 import pytz
 import math
 import xmlrpc.client
+import logging
 
 # # Configuration du chemin Odoo
 # ODOO_PATH = '/opt/odoo14'
@@ -27,6 +28,12 @@ except ImportError:
     sys.exit(1)
 
 app = Flask(__name__)
+
+# Configuration du logging
+gunicorn_logger = logging.getLogger('gunicorn.error')
+app.logger.handlers = gunicorn_logger.handlers
+app.logger.setLevel(gunicorn_logger.level)
+logger = app.logger
 
 # Configuration de base de données actuelle
 CURRENT_DATABASE_CONFIG = DATABASE_CONFIG.copy()
@@ -64,18 +71,18 @@ def call_odoo_xmlrpc(model, method, args=None, kwargs=None):
     """Appelle une méthode sur un modèle Odoo via XML-RPC.
     Retourne le résultat ou None en cas d'erreur."""
     if not CURRENT_XMLRPC_URL or not CURRENT_XMLRPC_LOGIN or not CURRENT_XMLRPC_PASSWORD:
-        print("XML-RPC : identifiants non configurés")
+        logger.warning("XML-RPC : identifiants non configurés")
         return None
     url = CURRENT_XMLRPC_URL.rstrip('/')
     db_name = CURRENT_DATABASE_CONFIG.get('database', '')
-    print(f"XML-RPC : appel {model}.{method}({args}) sur {url} (db={db_name}, login={CURRENT_XMLRPC_LOGIN})")
+    logger.info("XML-RPC : appel %s.%s(%s) sur %s (db=%s, login=%s)", model, method, args, url, db_name, CURRENT_XMLRPC_LOGIN)
     try:
         common = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/common')
         uid = common.authenticate(db_name, CURRENT_XMLRPC_LOGIN, CURRENT_XMLRPC_PASSWORD, {})
         if not uid:
-            print(f"XML-RPC : échec d'authentification (db={db_name}, login={CURRENT_XMLRPC_LOGIN})")
+            logger.error("XML-RPC : échec d'authentification (db=%s, login=%s)", db_name, CURRENT_XMLRPC_LOGIN)
             return None
-        print(f"XML-RPC : authentifié uid={uid}")
+        logger.info("XML-RPC : authentifié uid=%s", uid)
         models_proxy = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/object')
         result = models_proxy.execute_kw(
             db_name, uid, CURRENT_XMLRPC_PASSWORD,
@@ -83,12 +90,10 @@ def call_odoo_xmlrpc(model, method, args=None, kwargs=None):
             args or [],
             kwargs or {}
         )
-        print(f"XML-RPC : résultat = {result}")
+        logger.info("XML-RPC : résultat = %s", result)
         return result
     except Exception as e:
-        import traceback
-        print(f"XML-RPC erreur : {e}")
-        traceback.print_exc()
+        logger.exception("XML-RPC erreur : %s", e)
         return None
 
 
