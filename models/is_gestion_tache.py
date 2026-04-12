@@ -3,6 +3,9 @@ from odoo import models,fields,api
 from odoo.exceptions import Warning
 from datetime import datetime, timedelta, date
 import random
+import logging
+
+_logger = logging.getLogger(__name__)
 
 
 def generer_couleur_foncee():
@@ -543,6 +546,7 @@ class is_gestion_tache_planning(models.Model):
                 ], limit=1, order='backorder_sequence desc')
 
             if backorder:
+                _logger.info("OF %s → reliquat %s (qty=%s)", production.name, backorder.name, backorder.product_qty)
                 # Mettre à jour la tâche pour pointer vers le reliquat
                 vals = {
                     'production_id': backorder.id,
@@ -555,6 +559,7 @@ class is_gestion_tache_planning(models.Model):
                 task.write(vals)
             else:
                 # Pas de reliquat → marquer pour suppression
+                _logger.info("OF %s → supprimé du planning (pas de reliquat)", production.name)
                 tasks_to_remove |= task
 
         nb_reliquats = len(self.tache_ids) - len(tasks_to_remove)  # avant suppression
@@ -587,7 +592,7 @@ class is_gestion_tache_planning(models.Model):
                         #La nouvelle heure de début de l'OF est égale à la nouvelle heure de l'opération moins ce delta
                         date_planned_start_new = heure_debut_operation_modifiee - delta
 
-                print(production.name, production.state)
+                _logger.info("OF %s : date_planned_start %s → %s", production.name, production.date_planned_start, date_planned_start_new)
                 production.date_planned_start = date_planned_start_new
             
       
