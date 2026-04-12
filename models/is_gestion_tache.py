@@ -520,8 +520,49 @@ class is_gestion_tache_planning(models.Model):
         """Pour chaque OF présent dans ce planning, met à jour mrp.production.date_planned_start
         avec la start_date la plus récente parmi toutes les tâches is.gestion.tache liées à cet OF.
         Les autres tâches ne sont pas traitées.
+        Gère aussi les reliquats : remplace les OF terminés par leurs reliquats
+        et supprime du planning les OF sans reliquat.
         """
-        
+
+        # --- Phase 1 : Gestion des reliquats ---
+        # Remplacer les OF terminés (done) par leurs reliquats,
+        # et supprimer du planning les OF done/cancel sans reliquat.
+        tasks_to_remove = self.env['is.gestion.tache']
+        for task in self.tache_ids:
+            production = task.production_id
+            if not production or production.state not in ['done', 'cancel']:
+                continue
+
+            # Chercher le reliquat (production active dans le même groupe)
+            backorder = False
+            if production.state == 'done' and production.procurement_group_id:
+                backorder = self.env['mrp.production'].search([
+                    ('procurement_group_id', '=', production.procurement_group_id.id),
+                    ('state', 'not in', ['done', 'cancel']),
+                    ('id', '!=', production.id),
+                ], limit=1, order='backorder_sequence desc')
+
+            if backorder:
+                # Mettre à jour la tâche pour pointer vers le reliquat
+                vals = {
+                    'production_id': backorder.id,
+                    'product_qty': backorder.product_qty,
+                }
+                if backorder.is_ordre_travail_id:
+                    vals['ordre_travail_id'] = backorder.is_ordre_travail_id.id
+                if self.type_donnees == 'of' and backorder.is_workcenter_id:
+                    vals['workcenter_id'] = backorder.is_workcenter_id.id
+                task.write(vals)
+            else:
+                # Pas de reliquat → marquer pour suppression
+                tasks_to_remove |= task
+
+        nb_reliquats = len(self.tache_ids) - len(tasks_to_remove)  # avant suppression
+        nb_supprimes = len(tasks_to_remove)
+        if tasks_to_remove:
+            tasks_to_remove.unlink()
+
+        # --- Phase 2 : Mise à jour des dates ---
         productions={}
         for task in self.tache_ids:
             if task.start_date:
@@ -557,12 +598,15 @@ class is_gestion_tache_planning(models.Model):
 
 
         nb = len(productions)
+        msg_parts = [f"{nb} OF mis à jour"]
+        if nb_supprimes:
+            msg_parts.append(f"{nb_supprimes} OF terminés retirés du planning")
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',
             'params': {
                 'title': 'Mise à jour date OF',
-                'message': f"{nb} OF mis à jour.",
+                'message': ", ".join(msg_parts) + ".",
                 'type': 'success' if nb else 'warning',
                 'sticky': False,
             }
