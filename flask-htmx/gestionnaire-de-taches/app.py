@@ -9,6 +9,7 @@ import os
 import pytz
 import math
 import xmlrpc.client
+import ssl
 import logging
 
 # # Configuration du chemin Odoo
@@ -77,13 +78,17 @@ def call_odoo_xmlrpc(model, method, args=None, kwargs=None):
     db_name = CURRENT_DATABASE_CONFIG.get('database', '')
     logger.info("XML-RPC : appel %s.%s(%s) sur %s (db=%s, login=%s)", model, method, args, url, db_name, CURRENT_XMLRPC_LOGIN)
     try:
-        common = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/common')
+        # Contexte SSL sans vérification de certificat (redirection HTTP→HTTPS)
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        common = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/common', context=ssl_context)
         uid = common.authenticate(db_name, CURRENT_XMLRPC_LOGIN, CURRENT_XMLRPC_PASSWORD, {})
         if not uid:
             logger.error("XML-RPC : échec d'authentification (db=%s, login=%s)", db_name, CURRENT_XMLRPC_LOGIN)
             return None
         logger.info("XML-RPC : authentifié uid=%s", uid)
-        models_proxy = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/object')
+        models_proxy = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/object', context=ssl_context)
         result = models_proxy.execute_kw(
             db_name, uid, CURRENT_XMLRPC_PASSWORD,
             model, method,
