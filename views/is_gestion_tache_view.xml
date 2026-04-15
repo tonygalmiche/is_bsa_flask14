@@ -11,7 +11,11 @@
             <field name="arch" type="xml">
                 <form>
                     <header>
-                        <button name="action_chargement_taches" type="object" string="Charger les tâches" class="oe_highlight" attrs="{'invisible': [('tache_count','>',0)]}"/>
+                        <button
+                            name="action_chargement_taches" 
+                            type="object" string="Charger les tâches"
+                            confirm="ATTENTION, cela va charger les nouvelles données et supprimer les anciennes"
+                        />
                         <button name="action_maj_fermetures" type="object" string="Maj fermetures"/>
                         <button 
                             name="action_maj_date_of" type="object" string="Maj date OF" 

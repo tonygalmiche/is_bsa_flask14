@@ -97,44 +97,43 @@ class is_gestion_tache_planning(models.Model):
     def action_chargement_taches(self):
         """Action pour charger les tâches selon le type de données sélectionné"""
         cr=self._cr
-        self.tache_ids.unlink()
-        self.affaire_ids.unlink()
-        self.operateur_ids.unlink()
-        self.workcenter_ids.unlink()
 
-        #** Ajout des opérateurs ******************************************
+        #** Mise à jour des opérateurs ************************************
         domain=[]
         if self.type_donnees=='operation' and self.workcenter_id:
-            domain=[
-                ('is_workcenter_id', '=' , self.workcenter_id.id),
-            ]
+            domain=[('is_workcenter_id', '=', self.workcenter_id.id)]
         if self.type_donnees=='of':
-            domain=[
-                ('department_id', '=' , 16), #Acier
-            ]
-        operateurs=self.env['hr.employee'].search(domain)
-        default_operator_id=False
-        for operateur in operateurs:
-            vals={
-                "operator_id"  : operateur.id,
-                "planning_id"    : self.id,
-            }
-            res=self.env['is.gestion.tache.operateur'].create(vals)
+            domain=[('department_id', '=', 16)]  # Acier
+        new_operators = self.env['hr.employee'].search(domain)
+        new_operator_ids = set(new_operators.ids)
+        # Supprimer les opérateurs qui ne correspondent plus
+        self.operateur_ids.filtered(lambda o: o.operator_id.id not in new_operator_ids).unlink()
+        # Ajouter les opérateurs manquants
+        existing_operator_ids = set(self.operateur_ids.mapped('operator_id').ids)
+        default_operator_id = False
+        for operateur in new_operators:
+            if operateur.id not in existing_operator_ids:
+                self.env['is.gestion.tache.operateur'].create({
+                    "operator_id": operateur.id,
+                    "planning_id": self.id,
+                })
             default_operator_id = operateur.id
         #******************************************************************
 
-        #** Ajout des postes de charges ***********************************
-        domain=[
-            ('is_gestion_tache', '=' , True), 
-        ]
-        workcenters=self.env['mrp.workcenter'].search(domain)
-        default_workcenter_id=False
-        for workcenter in workcenters:
-            vals={
-                "workcenter_id": workcenter.id,
-                "planning_id"  : self.id,
-            }
-            res=self.env['is.gestion.tache.workcenter'].create(vals)
+        #** Mise à jour des postes de charges *****************************
+        new_workcenters = self.env['mrp.workcenter'].search([('is_gestion_tache', '=', True)])
+        new_workcenter_ids = set(new_workcenters.ids)
+        # Supprimer les postes qui ne correspondent plus
+        self.workcenter_ids.filtered(lambda w: w.workcenter_id.id not in new_workcenter_ids).unlink()
+        # Ajouter les postes manquants
+        existing_workcenter_ids = set(self.workcenter_ids.mapped('workcenter_id').ids)
+        default_workcenter_id = False
+        for workcenter in new_workcenters:
+            if workcenter.id not in existing_workcenter_ids:
+                self.env['is.gestion.tache.workcenter'].create({
+                    "workcenter_id": workcenter.id,
+                    "planning_id"  : self.id,
+                })
             default_workcenter_id = workcenter.id
         #******************************************************************
 
@@ -230,46 +229,61 @@ class is_gestion_tache_planning(models.Model):
 
 
         cr.execute(SQL, params)
-        rows = cr.dictfetchall()   
-        orders={}       
-        for row in rows:
-            #** Ajout de l'affaire ****************************************
-            if row['order_id'] not in orders:
-                color = row['is_couleur_affaire']
+        rows = cr.dictfetchall()
 
-                #** Si l'affaire n'a pas de couleur, il faut la générer ***
+        # Indexer les affaires et tâches existantes pour la mise à jour différentielle
+        existing_affaires = {a.order_id.id: a for a in self.affaire_ids if a.order_id}
+        if self.type_donnees == 'operation':
+            existing_tasks = {t.operation_id.id: t for t in self.tache_ids if t.operation_id}
+        else:
+            existing_tasks = {t.ordre_travail_id.id: t for t in self.tache_ids if t.ordre_travail_id}
+
+        seen_order_ids = set()
+        seen_task_keys = set()
+
+        for row in rows:
+            #** Mise à jour ou création de l'affaire **********************
+            order_id = row['order_id']
+            seen_order_ids.add(order_id)
+            if order_id not in existing_affaires:
+                color = row['is_couleur_affaire']
                 if not color:
                     color = generer_couleur_foncee()
-                    lines = self.env['sale.order'].search([('id','=',row['order_id'])])
+                    lines = self.env['sale.order'].search([('id', '=', order_id)])
                     for line in lines:
                         line.is_couleur_affaire = color
-                #**********************************************************
-                vals={
+                vals = {
                     "name"       : row['affaire_name'] or '??',
-                    "order_id"   : row['order_id'],
+                    "order_id"   : order_id,
                     "planning_id": self.id,
                     "color"      : color,
                 }
-                affaire=self.env['is.gestion.tache.affaire'].create(vals)
-                orders[row['order_id']] = affaire
+                affaire = self.env['is.gestion.tache.affaire'].create(vals)
+                existing_affaires[order_id] = affaire
             else:
-                affaire=orders[row['order_id']]
+                affaire = existing_affaires[order_id]
             #**************************************************************
 
-            #** Ajout de la tache *****************************************
-            if affaire:
+            #** Mise à jour ou création de la tâche ***********************
+            if self.type_donnees == 'operation':
+                task_key = row['operation_id']
+            else:
+                task_key = row['ordre_travail_id']
+
+            if affaire and task_key:
+                seen_task_keys.add(task_key)
                 start_date = row['start_date']
-                if start_date< datetime.now():
-                    start_date =  datetime.now()
-                product = self.env['product.product'].search([('id','=',row['product_id'])])[0]
+                if start_date < datetime.now():
+                    start_date = datetime.now()
+                product = self.env['product.product'].search([('id', '=', row['product_id'])])[0]
                 variant = product.product_template_attribute_value_ids._get_combination_name()
-                if self.type_donnees=='operation':
+                if self.type_donnees == 'operation':
                     name = "[%s] %s" % (variant, row.get('product_name'))
                     duration_hours = row.get('duration_hours')
                 else:
                     name = "[%s] %s" % (row.get('default_code'), row.get('product_name'))
-                    duration_hours = row.get('duree_planifiee') or row.get('duree_prevue') 
-                vals={
+                    duration_hours = row.get('duree_planifiee') or row.get('duree_prevue')
+                vals = {
                     "name"            : name,
                     "operator_id"     : row['employe_id']    or default_operator_id,
                     "workcenter_id"   : row['workcenter_id'] or default_workcenter_id,
@@ -277,15 +291,27 @@ class is_gestion_tache_planning(models.Model):
                     "start_date"      : start_date,
                     "duration_hours"  : duration_hours,
                     "planning_id"     : self.id,
-                    "order_id"        : row['order_id'],
+                    "order_id"        : order_id,
                     "production_id"   : row['production_id'],
                     "product_qty"     : row['product_qty'],
                     "ordre_travail_id": row['ordre_travail_id'],
                     "operation_id"    : row['operation_id'],
-                    "is_derniere_date_prevue": row['is_derniere_date_prevue']
+                    "is_derniere_date_prevue": row['is_derniere_date_prevue'],
                 }
-                res=self.env['is.gestion.tache'].create(vals)
+                if task_key in existing_tasks:
+                    existing_tasks[task_key].write(vals)
+                else:
+                    self.env['is.gestion.tache'].create(vals)
             #**************************************************************
+
+        # Supprimer les tâches qui ne sont plus dans les résultats
+        if self.type_donnees == 'operation':
+            self.tache_ids.filtered(lambda t: t.operation_id.id not in seen_task_keys).unlink()
+        else:
+            self.tache_ids.filtered(lambda t: t.ordre_travail_id.id not in seen_task_keys).unlink()
+
+        # Supprimer les affaires qui ne sont plus dans les résultats
+        self.affaire_ids.filtered(lambda a: a.order_id.id not in seen_order_ids).unlink()
 
         self.action_maj_fermetures()
         return True
