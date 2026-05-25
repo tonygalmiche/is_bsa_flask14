@@ -871,10 +871,9 @@ function showTooltip(event) {
             
             titleElement.textContent = title;
 
-            //    ${operationName ? `<div><strong>Opération:</strong> ${operationName}</div>` : ''}
-
             detailElement.innerHTML = `
                 ${alertMessage}
+                ${operationName && operationName !== 'None' ? `<div><strong>Opération:</strong> ${operationName}</div>` : ''}
                 ${productQty ? `<div><strong>Reste à produire:</strong> ${productQty}${derniereDataPrevue && derniereDataPrevue !== 'None' && derniereDataPrevue !== 'False' && derniereDataPrevue.trim() !== '' ? ` - ${derniereDataPrevue}` : ''}</div>` : ''}
                 ${endDateFormatted ? `<div><strong>Date de fin:</strong> ${endDateFormatted}</div>` : ''}
                 ${datePrevueOfFormatted ? `<div><strong>Date prévue OF:</strong> ${datePrevueOfFormatted}</div>` : ''}
