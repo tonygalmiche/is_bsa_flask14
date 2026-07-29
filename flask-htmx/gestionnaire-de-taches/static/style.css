@@ -649,7 +649,9 @@ body.dragging-active .task:not(.dragging) {
     font-size: 12px;
     z-index: 1000;
     pointer-events: none;
-    white-space: nowrap;
+    white-space: normal;
+    max-width: 420px;
+    word-wrap: break-word;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     opacity: 0;
     transition: opacity 0.2s ease;

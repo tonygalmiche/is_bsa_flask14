@@ -283,8 +283,9 @@ def load_tasks_from_db(planning_id=None):
                     mp.is_employe_ids_txt,
                     mp.is_composants_non_disponibles,
                     mp.name AS production_name,
-                    mp.is_date_prevue
-                FROM is_gestion_tache t 
+                    mp.is_date_prevue,
+                    mp.is_couleur_of
+                FROM is_gestion_tache t
                 LEFT JOIN mrp_production mp ON mp.id = t.production_id
                 WHERE t.planning_id = %s
                 ORDER BY t.start_date, t.operator_id
@@ -350,7 +351,8 @@ def load_tasks_from_db(planning_id=None):
                     "is_composants_non_disponibles": row.get('is_composants_non_disponibles'),
                     "production_name": row.get('production_name'),
                     "is_date_prevue": row.get('is_date_prevue'),
-                    "end_date": end_date_converted
+                    "end_date": end_date_converted,
+                    "color": row.get('is_couleur_of') if type_donnees == 'of' else None
                 }
                 tasks.append(task)
             
@@ -1817,7 +1819,7 @@ def reload_data():
     """Recharge à la fois les opérateurs, les affaires et les tâches depuis la base de données"""
     global OPERATORS, AFFAIRES, TASKS, START_DATE, NUM_SLOTS
     try:
-        # ÉTAPE 1 : Si maj_of_auto est coché, appeler action_maj_date_of via XML-RPC
+        # ÉTAPE 1 : Si maj_of_auto est coché, appeler action_maj_date_of puis action_chargement_taches via XML-RPC
         maj_of_msg = ""
         if CURRENT_PLANNING_ID:
             try:
@@ -1836,6 +1838,16 @@ def reload_data():
                                 maj_of_msg = " | Maj date OF effectuée"
                             else:
                                 maj_of_msg = " | Maj date OF échouée"
+
+                            result_chargement = call_odoo_xmlrpc(
+                                'is.gestion.tache.planning',
+                                'action_chargement_taches',
+                                [[CURRENT_PLANNING_ID]]
+                            )
+                            if result_chargement is not None:
+                                maj_of_msg += " | Charger les tâches effectuée"
+                            else:
+                                maj_of_msg += " | Charger les tâches échouée"
                     conn.close()
             except Exception as e:
                 maj_of_msg = f" | Maj date OF erreur: {e}"

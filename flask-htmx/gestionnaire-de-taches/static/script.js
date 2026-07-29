@@ -878,7 +878,7 @@ function showTooltip(event) {
                 ${endDateFormatted ? `<div><strong>Date de fin:</strong> ${endDateFormatted}</div>` : ''}
                 ${datePrevueOfFormatted ? `<div><strong>Date prévue OF:</strong> ${datePrevueOfFormatted}</div>` : ''}
                 ${employeIdsTxt ? `<div><strong>Opérateurs:</strong> ${employeIdsTxt}</div>` : ''}
-                ${composantsNonDisponibles && composantsNonDisponibles !== 'None' && composantsNonDisponibles !== 'False' && composantsNonDisponibles.trim() !== '' ? `<div><strong>Composants non disponibles:</strong> ${composantsNonDisponibles}</div>` : ''}
+                ${composantsNonDisponibles && composantsNonDisponibles !== 'None' && composantsNonDisponibles !== 'False' && composantsNonDisponibles.trim() !== '' ? `<div><strong>Composants non disponibles:</strong><br>${composantsNonDisponibles.split('\n').join('<br>')}</div>` : ''}
                 ${affairName ? `<div><strong>Affaire:</strong> ${affairName}</div>` : ''}
                 <div><strong>Durée:</strong> ${duration} créneaux</div>
                 <div><strong>Période:</strong> ${slotInfo.date} ${slotInfo.period}${duration > 1 ? ' → ' + endSlotInfo.date + ' ' + endSlotInfo.period : ''}</div>

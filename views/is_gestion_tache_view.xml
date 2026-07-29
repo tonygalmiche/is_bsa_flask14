@@ -17,8 +17,9 @@
                             confirm="ATTENTION, cela va charger les nouvelles données et supprimer les anciennes"
                         />
                         <button name="action_maj_fermetures" type="object" string="Maj fermetures"/>
-                        <button 
-                            name="action_maj_date_of" type="object" string="Maj date OF" 
+                        <button
+                            name="action_maj_date_of" type="object" string="Maj date OF"
+                            attrs="{'invisible':[('type_donnees','!=','of')]}"
                             confirm="ATTENTION, cela va changer la date prévue de tous les OF concernés et également l'heure de début de toutes les opérations de ces OF"
                         />
                         <button 
@@ -54,7 +55,7 @@
                                     <tree>
                                         <field name="name"/>
                                         <field name="order_id" widget="many2one_clickable"/>
-                                        <field name="color" widget="color"/>
+                                        <field name="color" widget="color" attrs="{'column_invisible': [('parent.type_donnees','=','of')]}"/>
                                     </tree>
                                 </field>
                             </page>

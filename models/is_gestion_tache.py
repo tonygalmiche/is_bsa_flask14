@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from odoo import models,fields,api
 from odoo.exceptions import Warning
-from datetime import datetime, timedelta, date
+from datetime import timedelta
 import random
 import logging
 
@@ -39,7 +39,7 @@ class is_gestion_tache_planning(models.Model):
     type_donnees  = fields.Selection([
         ('operation', 'Opération'),
         ('of', 'OF'),
-    ], string="Type de données", default='operation', tracking=True)
+    ], string="Type de données", default=lambda self: 'operation' if self.env.company.is_site == 'bsa' else 'of', tracking=True)
     workcenter_id = fields.Many2one('mrp.workcenter', 'Poste de charge', tracking=True)
     affaire       = fields.Char(string="Affaire", help="Filtre sur le nom d'affaire. Vous pouvez saisir plusieurs valeurs séparées par des virgules.", tracking=True)
     is_pret       = fields.Selection([
@@ -273,8 +273,6 @@ class is_gestion_tache_planning(models.Model):
             if affaire and task_key:
                 seen_task_keys.add(task_key)
                 start_date = row['start_date']
-                if start_date < datetime.now():
-                    start_date = datetime.now()
                 product = self.env['product.product'].search([('id', '=', row['product_id'])])[0]
                 variant = product.product_template_attribute_value_ids._get_combination_name()
                 if self.type_donnees == 'operation':

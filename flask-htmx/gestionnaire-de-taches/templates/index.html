@@ -129,7 +129,7 @@
                                      data-composants-non-disponibles="{{ task.is_composants_non_disponibles | e }}"
                                      data-date-prevue="{{ task.is_date_prevue | e }}"
                                      data-affair-name="{{ affair.name | e }}"
-                                     style="background-color: {{ affair.color }}; 
+                                     style="background-color: {{ task.color if task.color else affair.color }};
                                             left: calc({{ task.start_slot }} * var(--slot-width)); 
                                             width: calc({{ task.duration }} * var(--slot-width) - 2px);"
                                      draggable="true"
