@@ -1,11 +1,43 @@
 # -*- coding: utf-8 -*-
 from odoo import models,fields,api
 from odoo.exceptions import Warning
-from datetime import timedelta
+from datetime import timedelta, time as dtime
 import random
 import logging
+import pytz
 
 _logger = logging.getLogger(__name__)
+
+PARIS_TZ = pytz.timezone('Europe/Paris')
+
+
+def _periodes_couvertes(start_dt, end_dt):
+    """Calcule les (date, periode) couverts par un intervalle UTC [start_dt, end_dt), en heure
+    locale Europe/Paris. periode vaut 'matin', 'apres_midi' ou 'journee' (frontière fixée à 12h,
+    cohérente avec la coupure AM/PM utilisée partout ailleurs dans le planning).
+    """
+    if not start_dt or not end_dt or start_dt >= end_dt:
+        return []
+    start_local = pytz.utc.localize(start_dt).astimezone(PARIS_TZ)
+    end_local = pytz.utc.localize(end_dt).astimezone(PARIS_TZ)
+    # Fin exclusive : si elle tombe pile à minuit, le dernier jour n'est pas concerné
+    last_day = end_local.date() if end_local.time() != dtime(0, 0) else (end_local.date() - timedelta(days=1))
+
+    result = []
+    cur_day = start_local.date()
+    while cur_day <= last_day:
+        start_hour = (start_local.hour + start_local.minute / 60) if cur_day == start_local.date() else 0
+        end_hour = (end_local.hour + end_local.minute / 60) if cur_day == end_local.date() else 24
+        covers_matin = start_hour < 12
+        covers_apres_midi = end_hour > 12
+        if covers_matin and covers_apres_midi:
+            result.append((cur_day, 'journee'))
+        elif covers_matin:
+            result.append((cur_day, 'matin'))
+        elif covers_apres_midi:
+            result.append((cur_day, 'apres_midi'))
+        cur_day = cur_day + timedelta(days=1)
+    return result
 
 
 def generer_couleur_foncee():
@@ -271,8 +303,24 @@ class is_gestion_tache_planning(models.Model):
                 task_key = row['ordre_travail_id']
 
             if affaire and task_key:
+                if task_key in seen_task_keys:
+                    _logger.warning("action_chargement_taches : task_key %s (type_donnees=%s) déjà vu dans cette même exécution -> la requête SQL renvoie plusieurs lignes pour la même clé (production_id=%s, ordre_travail_id=%s, operation_id=%s)",
+                                     task_key, self.type_donnees, row.get('production_id'), row.get('ordre_travail_id'), row.get('operation_id'))
                 seen_task_keys.add(task_key)
                 start_date = row['start_date']
+                operator_id = row['employe_id']    or default_operator_id
+                workcenter_id = row['workcenter_id'] or default_workcenter_id
+                # Glisse le début au prochain slot ouvert si besoin (week-end + fermetures du planning).
+                # Avance slot par slot (AM->PM->AM du jour suivant...) : une fermeture couvrant toute
+                # la journée, le premier slot ouvert rencontré est donc naturellement le AM du premier
+                # jour ouvré (pas de cas particulier à coder pour "revenir le matin").
+                safety = 0
+                while safety < 730 and not self.est_jour_ouvre(start_date.date(), 'matin' if start_date.hour < 12 else 'apres_midi', operator_id=operator_id, workcenter_id=workcenter_id):
+                    if start_date.hour < 12:
+                        start_date = start_date.replace(hour=14, minute=0, second=0, microsecond=0)
+                    else:
+                        start_date = (start_date + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
+                    safety += 1
                 product = self.env['product.product'].search([('id', '=', row['product_id'])])[0]
                 variant = product.product_template_attribute_value_ids._get_combination_name()
                 if self.type_donnees == 'operation':
@@ -283,8 +331,8 @@ class is_gestion_tache_planning(models.Model):
                     duration_hours = row.get('duree_planifiee') or row.get('duree_prevue')
                 vals = {
                     "name"            : name,
-                    "operator_id"     : row['employe_id']    or default_operator_id,
-                    "workcenter_id"   : row['workcenter_id'] or default_workcenter_id,
+                    "operator_id"     : operator_id,
+                    "workcenter_id"   : workcenter_id,
                     "affaire_id"      : affaire.id,
                     "start_date"      : start_date,
                     "duration_hours"  : duration_hours,
@@ -299,7 +347,12 @@ class is_gestion_tache_planning(models.Model):
                 if task_key in existing_tasks:
                     existing_tasks[task_key].write(vals)
                 else:
-                    self.env['is.gestion.tache'].create(vals)
+                    new_task = self.env['is.gestion.tache'].create(vals)
+                    _logger.info("action_chargement_taches : création tâche %s pour task_key=%s (type_donnees=%s, workcenter_id=%s, start_date=%s)",
+                                 new_task.id, task_key, self.type_donnees, vals.get('workcenter_id'), vals.get('start_date'))
+                    # Sans cette ligne, une deuxième ligne SQL avec le même task_key dans cette
+                    # même exécution recréerait un doublon au lieu de faire un write().
+                    existing_tasks[task_key] = new_task
             #**************************************************************
 
         # Supprimer les tâches qui ne sont plus dans les résultats
@@ -350,12 +403,6 @@ class is_gestion_tache_planning(models.Model):
                 for conge in conges:
                     start_dt = conge.date_from
                     end_dt = conge.date_to
-                    if not start_dt or not end_dt or start_dt >= end_dt:
-                        continue
-
-                    # Fin exclusive => soustraire 1 seconde pour inclure le dernier jour
-                    last_day = (end_dt - timedelta(seconds=1)).date()
-                    cur_day = start_dt.date()
 
                     # Intitulé depuis le congé
                     intitule = conge.name or 'Fermeture'
@@ -364,20 +411,22 @@ class is_gestion_tache_planning(models.Model):
                     workcenter_id = None
                     if conge.workcenter_id:
                         workcenter_id = conge.workcenter_id.id
-                    
-                    while cur_day <= last_day:
-                        # Clé unique pour éviter les doublons (workcenter, jour)
-                        key = (workcenter_id, cur_day)
+
+                    # date_from/date_to sont stockés en UTC : _periodes_couvertes convertit en heure
+                    # locale et détermine, par jour, si le congé couvre le matin, l'après-midi ou les deux.
+                    for cur_day, periode in _periodes_couvertes(start_dt, end_dt):
+                        # Clé unique pour éviter les doublons (workcenter, jour, période)
+                        key = (workcenter_id, cur_day, periode)
                         if key not in fermeture_keys:
                             vals_list.append({
                                 'planning_id': planning.id,
                                 'operator_id': None,  # Pas d'opérateur spécifique pour les OF
                                 'workcenter_id': workcenter_id,
                                 'date_fermeture': cur_day,
+                                'periode': periode,
                                 'intitule': intitule,
                             })
                             fermeture_keys.add(key)
-                        cur_day = cur_day + timedelta(days=1)
 
 
 
@@ -405,32 +454,25 @@ class is_gestion_tache_planning(models.Model):
                     ('employe_id', 'in', employee_ids.ids),
                 ])
                 for absn in absences:
-                    # Déterminer la plage de dates (par jour) couverte par l'absence
                     start_dt = absn.date_debut
                     end_dt = absn.date_fin
-                    if not start_dt or not end_dt or start_dt >= end_dt:
-                        continue
-
-                    # Fin exclusive => soustraire 1 seconde pour inclure le dernier jour
-                    last_day = (end_dt - timedelta(seconds=1)).date()
-                    cur_day = start_dt.date()
 
                     # Intitulé = motif [+ commentaire]
                     intitule = absn.motif_id.name or 'Absence'
                     if absn.commentaire:
                         intitule = f"{intitule} - {absn.commentaire}"
 
-                    while cur_day <= last_day:
-                        key = (absn.employe_id.id, cur_day)
+                    for cur_day, periode in _periodes_couvertes(start_dt, end_dt):
+                        key = (absn.employe_id.id, cur_day, periode)
                         if key not in fermeture_keys:
                             vals_list.append({
                                 'planning_id': planning.id,
                                 'operator_id': absn.employe_id.id,
                                 'date_fermeture': cur_day,
+                                'periode': periode,
                                 'intitule': intitule,
                             })
                             fermeture_keys.add(key)
-                        cur_day = cur_day + timedelta(days=1)
 
                 # 2) Récupérer les fermetures issues des calendriers (resource.calendar.leaves)
                 # Associer chaque employé à son calendrier
@@ -451,12 +493,6 @@ class is_gestion_tache_planning(models.Model):
                     for leave in calendar_leaves:
                         start_dt = leave.date_from
                         end_dt = leave.date_to
-                        if not start_dt or not end_dt or start_dt >= end_dt:
-                            continue
-
-                        # Fin exclusive => soustraire 1 seconde pour inclure le dernier jour
-                        last_day = (end_dt - timedelta(seconds=1)).date()
-                        cur_day = start_dt.date()
 
                         # Intitulé depuis le calendrier
                         intitule = leave.name or 'Fermeture calendrier'
@@ -466,22 +502,51 @@ class is_gestion_tache_planning(models.Model):
                         if not emps:
                             continue
 
-                        while cur_day <= last_day:
+                        for cur_day, periode in _periodes_couvertes(start_dt, end_dt):
                             for emp in emps:
-                                key = (emp.id, cur_day)
+                                key = (emp.id, cur_day, periode)
                                 if key not in fermeture_keys:
                                     vals_list.append({
                                         'planning_id': planning.id,
                                         'operator_id': emp.id,
                                         'date_fermeture': cur_day,
+                                        'periode': periode,
                                         'intitule': intitule,
                                     })
                                     fermeture_keys.add(key)
-                            cur_day = cur_day + timedelta(days=1)
 
             if vals_list:
                 self.env['is.gestion.tache.fermeture'].create(vals_list)
 
+        return True
+
+
+    def est_jour_ouvre(self, date, periode, operator_id=False, workcenter_id=False):
+        """Indique si un slot (matin/après-midi) est ouvert pour un opérateur (mode 'operation')
+        ou un poste de charge (mode 'of').
+
+        `periode` vaut 'matin' ou 'apres_midi'. Un slot est fermé s'il tombe un week-end, ou si
+        une fermeture du planning (fermeture_ids) le couvre : une fermeture 'journee' ferme les
+        deux périodes, une fermeture 'matin'/'apres_midi' ne ferme que la période correspondante.
+        La fermeture peut être propre à cet opérateur/poste, ou globale (ni operator_id ni
+        workcenter_id renseignés).
+        """
+        self.ensure_one()
+        if date.weekday() in (5, 6):
+            return False
+        for fermeture in self.fermeture_ids:
+            if fermeture.date_fermeture != date:
+                continue
+            if fermeture.periode != 'journee' and fermeture.periode != periode:
+                continue
+            if fermeture.operator_id:
+                if operator_id and fermeture.operator_id.id == operator_id:
+                    return False
+            elif fermeture.workcenter_id:
+                if workcenter_id and fermeture.workcenter_id.id == workcenter_id:
+                    return False
+            else:
+                return False
         return True
 
 
@@ -805,6 +870,11 @@ class is_gestion_tache_fermeture(models.Model):
     _rec_name = 'intitule'
 
     date_fermeture = fields.Date(string="Date de fermeture", required=True)
+    periode        = fields.Selection([
+        ('journee', 'Journée complète'),
+        ('matin', 'Matin'),
+        ('apres_midi', 'Après-midi'),
+    ], string="Période", default='journee', required=True)
     operator_id    = fields.Many2one('hr.employee', string="Opérateur")
     workcenter_id  = fields.Many2one('mrp.workcenter', string="Poste de charge")
     intitule       = fields.Char(string="Intitulé")
@@ -829,14 +899,28 @@ class is_gestion_tache(models.Model):
                 DAY_DURATION_HOURS = 7.0  # Heures de travail par jour
                 HALF_DAY_HOURS = DAY_DURATION_HOURS / 2  # 3.5 heures de travail par slot
                 SLOT_CALENDAR_HOURS = 12.0  # Heures calendaires par slot (24h / 2 slots)
-                
+
                 # Convertir duration_hours en nombre de slots (arrondi au supérieur)
                 import math
-                duration_slots = int(math.ceil(obj.duration_hours / HALF_DAY_HOURS))
-                
-                # Calculer la fin calendaire basée sur les slots
-                # Chaque slot occupe 12 heures calendaires
-                end_date = obj.start_date + timedelta(hours=duration_slots * SLOT_CALENDAR_HOURS)
+                remaining_slots = int(math.ceil(obj.duration_hours / HALF_DAY_HOURS))
+
+                # Avance slot par slot (12h calendaires) en ne décomptant que les slots
+                # dont le jour est ouvré : les slots des jours fermés (week-end, fermeture)
+                # allongent la durée calendaire sans compter dans la durée réelle travaillée.
+                planning = obj.planning_id
+                current = obj.start_date
+                while remaining_slots > 0:
+                    if planning and not planning.est_jour_ouvre(
+                        current.date(),
+                        'matin' if current.hour < 12 else 'apres_midi',
+                        operator_id=obj.operator_id.id,
+                        workcenter_id=obj.workcenter_id.id,
+                    ):
+                        current = current + timedelta(hours=SLOT_CALENDAR_HOURS)
+                        continue
+                    remaining_slots -= 1
+                    current = current + timedelta(hours=SLOT_CALENDAR_HOURS)
+                end_date = current
             obj.end_date = end_date
 
     name           = fields.Char("Tache", required=True)

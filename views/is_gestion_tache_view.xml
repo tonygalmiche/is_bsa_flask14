@@ -257,6 +257,7 @@
             <field name="arch" type="xml">
                 <tree>
                     <field name="date_fermeture"/>
+                    <field name="periode"/>
                     <field name="operator_id" widget="many2one_clickable"/>
                     <field name="workcenter_id" widget="many2one_clickable"/>
                     <field name="intitule"/>
@@ -273,6 +274,7 @@
                     <sheet>
                         <group>
                             <field name="date_fermeture"/>
+                            <field name="periode"/>
                             <field name="operator_id"/>
                             <field name="workcenter_id"/>
                             <field name="intitule"/>

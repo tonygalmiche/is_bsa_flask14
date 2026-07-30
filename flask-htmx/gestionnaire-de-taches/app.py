@@ -582,12 +582,15 @@ OPERATORS = []
 AFFAIRES = []
 TASKS = []
 
-# Utilitaire: générer les datetimes AM/PM pour une date (naïf, heure locale affichage)
-def _halfday_datetimes(d: date):
-    return [
-        datetime(d.year, d.month, d.day, 8, 0, 0),
-        datetime(d.year, d.month, d.day, 14, 0, 0),
-    ]
+# Utilitaire: générer les datetimes AM/PM pour une date, selon la période fermée
+# (naïf, heure locale affichage)
+def _halfday_datetimes(d: date, periode='journee'):
+    result = []
+    if periode in ('journee', 'matin'):
+        result.append(datetime(d.year, d.month, d.day, 8, 0, 0))
+    if periode in ('journee', 'apres_midi'):
+        result.append(datetime(d.year, d.month, d.day, 14, 0, 0))
+    return result
 
 def load_fermetures_from_db(planning_id=None):
     """Charge les fermetures (is_gestion_tache_fermeture) et met à jour:
@@ -627,9 +630,9 @@ def load_fermetures_from_db(planning_id=None):
                 # ou les fermetures générales (sans workcenter_id)
                 cursor.execute(
                     """
-                    SELECT date_fermeture, operator_id, workcenter_id
+                    SELECT date_fermeture, operator_id, workcenter_id, periode
                     FROM is_gestion_tache_fermeture
-                    WHERE planning_id = %s 
+                    WHERE planning_id = %s
                     AND (workcenter_id = %s OR workcenter_id IS NULL)
                     """,
                     (planning_id, planning_workcenter_id),
@@ -638,7 +641,7 @@ def load_fermetures_from_db(planning_id=None):
                 # Pour les plannings d'opérations, charger toutes les fermetures
                 cursor.execute(
                     """
-                    SELECT date_fermeture, operator_id, workcenter_id
+                    SELECT date_fermeture, operator_id, workcenter_id, periode
                     FROM is_gestion_tache_fermeture
                     WHERE planning_id = %s
                     """,
@@ -665,14 +668,15 @@ def load_fermetures_from_db(planning_id=None):
             operator_set = set(operator_ids)
             absences_by_operator = {op_id: set() for op_id in operator_ids}
         
-        # Map date -> opérateurs/workcenters ayant fermeture ce jour
+        # Map (date, periode) -> opérateurs/workcenters ayant fermeture ce jour/cette période
         operators_by_date = {}
 
         for r in rows:
             d = r['date_fermeture']
             op_id = r.get('operator_id')
             workcenter_id = r.get('workcenter_id')
-            
+            periode = r.get('periode') or 'journee'
+
             # Normaliser d en type date
             if isinstance(d, datetime):
                 d = d.date()
@@ -685,37 +689,40 @@ def load_fermetures_from_db(planning_id=None):
             else:
                 effective_id = op_id
 
-            # Indexer par date les opérateurs/workcenters concernés
-            operators_by_date.setdefault(d, set())
-            if effective_id is None:
-                # Enregistrement sans opérateur/workcenter => fermeture globale ce jour
-                if operator_ids:
-                    for oid in operator_ids:
-                        absences_by_operator.setdefault(oid, set()).add(d)
-                operators_by_date[d] = set(operator_ids) if operator_ids else {None}
-            else:
-                operators_by_date[d].add(effective_id)
-                if effective_id in absences_by_operator:
-                    absences_by_operator[effective_id].add(d)
+            # Une fermeture 'journee' ferme les deux demi-journées, 'matin'/'apres_midi' une seule
+            periodes = ('matin', 'apres_midi') if periode == 'journee' else (periode,)
+            for p in periodes:
+                key = (d, p)
+                operators_by_date.setdefault(key, set())
+                if effective_id is None:
+                    # Enregistrement sans opérateur/workcenter => fermeture globale ce jour/cette période
+                    if operator_ids:
+                        for oid in operator_ids:
+                            absences_by_operator.setdefault(oid, set()).add(key)
+                    operators_by_date[key] = set(operator_ids) if operator_ids else {None}
+                else:
+                    operators_by_date[key].add(effective_id)
+                    if effective_id in absences_by_operator:
+                        absences_by_operator[effective_id].add(key)
 
         # Renseigner absences sur OPERATORS en AM/PM
         for op in OPERATORS:
-            dates_for_op = absences_by_operator.get(op['id'], set())
+            keys_for_op = absences_by_operator.get(op['id'], set())
             abs_halfdays = []
-            for day in sorted(dates_for_op):
-                abs_halfdays.extend(_halfday_datetimes(day))
+            for day, p in sorted(keys_for_op):
+                abs_halfdays.extend(_halfday_datetimes(day, p))
             op['absences'] = abs_halfdays
 
-        # Calcul des jours de congé global: jours couverts pour tous les opérateurs/workcenters
+        # Calcul des demi-journées de congé global: couvertes pour tous les opérateurs/workcenters
         global_vacation_dates = []
-        for d, ops in operators_by_date.items():
+        for (d, p), ops in operators_by_date.items():
             if not operator_set:
                 # S'il n'y a pas d'opérateurs/workcenters chargés, considérer les jours sans ID comme globaux
                 if ops == {None}:
-                    global_vacation_dates.extend(_halfday_datetimes(d))
+                    global_vacation_dates.extend(_halfday_datetimes(d, p))
             else:
                 if ops.issuperset(operator_set):
-                    global_vacation_dates.extend(_halfday_datetimes(d))
+                    global_vacation_dates.extend(_halfday_datetimes(d, p))
 
         VACATION_DATES = global_vacation_dates
 
