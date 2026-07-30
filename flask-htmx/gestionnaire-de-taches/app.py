@@ -843,8 +843,57 @@ def get_task_start_slot(task):
     return date_to_slot(task["start_date"])
 
 def get_task_duration_slots(task):
-    """Récupère la durée en slots d'une tâche"""
+    """Récupère la durée réelle (travaillée) en slots d'une tâche, fermetures exclues"""
     return hours_to_slots(task["duration_hours"])
+
+def is_closed_slot(slot, operator_id):
+    """Vrai si le slot est fermé (week-end, fermeture globale/poste ou absence de l'opérateur)"""
+    return is_weekend_slot(slot) or is_vacation_slot(slot) or is_absence_slot(operator_id, slot)
+
+def compute_span_slots(start_slot, real_duration_slots, operator_id):
+    """Nombre de slots occupés à l'écran pour réaliser `real_duration_slots` slots de travail
+    réel à partir de start_slot : les slots fermés rencontrés en cours de route allongent
+    le bloc (ils restent affichés, grisés, à l'intérieur) sans compter comme du travail."""
+    remaining = real_duration_slots
+    slot = start_slot
+    safety = 0
+    max_safety = (NUM_SLOTS + real_duration_slots) * 2 + 10
+    while remaining > 0 and safety < max_safety:
+        if not is_closed_slot(slot, operator_id):
+            remaining -= 1
+        slot += 1
+        safety += 1
+    return slot - start_slot
+
+def count_open_slots(start_slot, span, operator_id):
+    """Compte le nombre de slots ouverts (travail réel) dans [start_slot, start_slot+span)"""
+    return sum(1 for s in range(start_slot, start_slot + span) if not is_closed_slot(s, operator_id))
+
+def compute_start_for_end(end_slot, real_duration_slots, operator_id):
+    """Calcule le slot de départ nécessaire pour qu'une tâche de `real_duration_slots` slots de
+    travail réel se termine exactement à `end_slot` (fin exclue), en remontant sur les slots
+    fermés rencontrés (ils allongent le bloc vers la gauche sans compter comme du travail).
+    Symétrique de compute_span_slots, utilisé pour caler une poussée vers la gauche sur une
+    fin calendaire donnée (sans quoi le calcul approximatif peut faire déborder la tâche au-delà
+    de la limite demandée quand une fermeture se trouve entre le départ naïf et cette limite)."""
+    remaining = real_duration_slots
+    slot = end_slot
+    safety = 0
+    max_safety = (NUM_SLOTS + real_duration_slots) * 2 + 10
+    while remaining > 0 and safety < max_safety:
+        slot -= 1
+        if not is_closed_slot(slot, operator_id):
+            remaining -= 1
+        safety += 1
+    return slot
+
+def get_task_span_slots(task, start_slot=None):
+    """Span calendaire (en slots) occupé par la tâche à l'écran, fermetures comprises.
+    À utiliser pour toute la logique de collision/poussée/affichage (jamais la durée réelle seule)."""
+    if start_slot is None:
+        start_slot = get_task_start_slot(task)
+    real_duration_slots = get_task_duration_slots(task)
+    return compute_span_slots(start_slot, real_duration_slots, task["operator_id"])
 
 def update_task_from_slots(task, start_slot, duration_slots):
     """Met à jour une tâche avec des valeurs en slots"""
@@ -901,13 +950,14 @@ def get_tasks_for_operator(operator_id):
     return [task for task in TASKS if task["operator_id"] == operator_id]
 
 def check_collision(operator_id, start_slot, duration, exclude_task_id=None):
-    """Vérifie s'il y a collision avec une autre tâche (retourne la première trouvée)"""
+    """Vérifie s'il y a collision avec une autre tâche (retourne la première trouvée)
+    `duration` doit être le span (occupation à l'écran, fermetures comprises) de la position testée"""
     tasks = get_tasks_for_operator(operator_id)
     for task in tasks:
         if exclude_task_id and task["id"] == exclude_task_id:
             continue
         task_start_slot = get_task_start_slot(task)
-        task_duration_slots = get_task_duration_slots(task)
+        task_duration_slots = get_task_span_slots(task)
         task_end = task_start_slot + task_duration_slots
         new_end = start_slot + duration
         
@@ -925,7 +975,7 @@ def get_all_colliding_tasks(operator_id, start_slot, duration, exclude_task_id=N
         if exclude_task_id and task["id"] == exclude_task_id:
             continue
         task_start_slot = get_task_start_slot(task)
-        task_duration_slots = get_task_duration_slots(task)
+        task_duration_slots = get_task_span_slots(task)
         task_end = task_start_slot + task_duration_slots
         new_end = start_slot + duration
         
@@ -937,7 +987,8 @@ def get_all_colliding_tasks(operator_id, start_slot, duration, exclude_task_id=N
 
 def push_all_colliding_tasks_right(operator_id, start_slot, duration, exclude_task_id=None):
     """Pousse toutes les tâches en collision vers la droite, en cascade
-    
+    `duration` doit être le span (occupation à l'écran, fermetures comprises) de la position testée
+
     Returns:
         bool: True si toutes les tâches ont pu être déplacées, False sinon
     """
@@ -945,70 +996,82 @@ def push_all_colliding_tasks_right(operator_id, start_slot, duration, exclude_ta
     all_tasks = get_tasks_for_operator(operator_id)
     if exclude_task_id:
         all_tasks = [task for task in all_tasks if task["id"] != exclude_task_id]
-    
+
     # Trier par position de début
     all_tasks.sort(key=lambda x: get_task_start_slot(x))
-    
+
     new_task_end = start_slot + duration
-    
+
     # Trouver toutes les tâches qui sont réellement en collision avec la nouvelle position
     tasks_to_push = []
     for task in all_tasks:
         task_start = get_task_start_slot(task)
-        task_duration = get_task_duration_slots(task)
+        task_duration = get_task_span_slots(task)
         task_end = task_start + task_duration
-        
+
         # Vérification de collision réelle : les deux tâches se chevauchent
         if not (new_task_end <= task_start or start_slot >= task_end):
             tasks_to_push.append(task)
-    
+
+    print(
+        f"[DEBUG] push_all_colliding_tasks_right: operator={operator_id} start_slot={start_slot} duration={duration} "
+        f"new_task_end={new_task_end} exclude={exclude_task_id} -> tasks_to_push="
+        f"{[(t['id'], get_task_start_slot(t), get_task_span_slots(t)) for t in tasks_to_push]}",
+        flush=True
+    )
+
     if not tasks_to_push:
         return True  # Aucune tâche à pousser
-    
+
     # Trier les tâches en collision par position (de gauche à droite)
     tasks_to_push.sort(key=lambda x: get_task_start_slot(x))
-    
+
     # Phase 1 : Déplacer les tâches en collision directe
     cascade_tasks = []
     current_position = new_task_end
-    
+
     for task in tasks_to_push:
-        new_position = current_position
-        task_duration = get_task_duration_slots(task)
-        
+        # Ne jamais faire démarrer une tâche poussée sur un slot fermé
+        new_position = next_open_start_slot(operator_id, current_position, direction=1)
+        real_duration = get_task_duration_slots(task)
+        span_duration = compute_span_slots(new_position, real_duration, operator_id)
+
         # Vérifier si cette nouvelle position crée une collision avec d'autres tâches
-        potential_collision = check_collision(operator_id, new_position, task_duration, task["id"])
-        
+        potential_collision = check_collision(operator_id, new_position, span_duration, task["id"])
+
         if potential_collision and potential_collision not in tasks_to_push:
             # Il y a une nouvelle collision, ajouter cette tâche à la cascade
             cascade_tasks.append(potential_collision)
-        
-        # Mettre à jour la position de cette tâche
-        update_task_from_slots(task, new_position, task_duration)
-        current_position = new_position + task_duration
-    
+
+        # Mettre à jour la position de cette tâche (durée réelle conservée)
+        print(f"[DEBUG] push_all_colliding_tasks_right: phase1 move task={task['id']} -> new_position={new_position} span={span_duration}", flush=True)
+        update_task_from_slots(task, new_position, real_duration)
+        current_position = new_position + span_duration
+
     # Phase 2 : Gérer les tâches en cascade (récursivement)
     while cascade_tasks:
         next_cascade = []
         cascade_tasks.sort(key=lambda x: get_task_start_slot(x))
         
         for task in cascade_tasks:
-            new_position = current_position
-            task_duration = get_task_duration_slots(task)
-            
+            # Ne jamais faire démarrer une tâche poussée sur un slot fermé
+            new_position = next_open_start_slot(operator_id, current_position, direction=1)
+            real_duration = get_task_duration_slots(task)
+            span_duration = compute_span_slots(new_position, real_duration, operator_id)
+
             # Vérifier si on dépasse la limite
-            if new_position + task_duration > NUM_SLOTS:
+            if new_position + span_duration > NUM_SLOTS:
                 return False  # Pas assez d'espace
-            
+
             # Vérifier les nouvelles collisions
-            potential_collision = check_collision(operator_id, new_position, task_duration, task["id"])
-            
+            potential_collision = check_collision(operator_id, new_position, span_duration, task["id"])
+
             if potential_collision and potential_collision not in tasks_to_push and potential_collision not in cascade_tasks:
                 next_cascade.append(potential_collision)
-            
-            # Mettre à jour la position
-            update_task_from_slots(task, new_position, task_duration)
-            current_position = new_position + task_duration
+
+            # Mettre à jour la position (durée réelle conservée)
+            update_task_from_slots(task, new_position, real_duration)
+            current_position = new_position + span_duration
         
         # Préparer la prochaine itération
         cascade_tasks = next_cascade
@@ -1024,8 +1087,9 @@ def handle_keyboard_push(task_id, direction):
         
         operator_id = task["operator_id"]
         current_slot = get_task_start_slot(task)
-        duration = get_task_duration_slots(task)
-        
+        real_duration = get_task_duration_slots(task)
+        print(f"[DEBUG] handle_keyboard_push: task={task_id} direction={direction} operator={operator_id} current_slot={current_slot} real_duration={real_duration}", flush=True)
+
         if direction == "left":
             new_slot = max(0, current_slot - 1)
             new_slot = next_open_start_slot(operator_id, new_slot, direction=-1)
@@ -1033,33 +1097,39 @@ def handle_keyboard_push(task_id, direction):
                 # Plus aucun slot ouvert avant : rester sur place
                 return {"success": True, "new_slot": current_slot, "blocked": True}
             if new_slot != current_slot:
+                span_at_new_slot = compute_span_slots(new_slot, real_duration, operator_id)
                 # Vérifier s'il y a collision avant de déplacer
-                collision = check_collision(operator_id, new_slot, duration, task_id)
+                collision = check_collision(operator_id, new_slot, span_at_new_slot, task_id)
+                print(f"[DEBUG] handle_keyboard_push(left): task={task_id} current_slot={current_slot} new_slot={new_slot} span={span_at_new_slot} collision={collision['id'] if collision else None}", flush=True)
                 if collision:
                     # Essayer de pousser la tâche en collision vers la gauche
                     push_success = push_task_cascade(collision, "left", new_slot)
+                    print(f"[DEBUG] handle_keyboard_push(left): push_task_cascade success={push_success} collision_new_slot={get_task_start_slot(collision)}", flush=True)
                     if not push_success:
                         # Si impossible de pousser, la tâche reste à sa position actuelle
                         return {"success": True, "new_slot": current_slot, "blocked": True}
-                
-                # Déplacer la tâche principale
-                update_task_from_slots(task, new_slot, duration)
-                
+
+                # Déplacer la tâche principale (durée réelle conservée)
+                update_task_from_slots(task, new_slot, real_duration)
+
         elif direction == "right":
-            new_slot = min(NUM_SLOTS - duration, current_slot + 1)
-            new_slot = min(NUM_SLOTS - duration, next_open_start_slot(operator_id, new_slot, direction=1))
+            new_slot = min(NUM_SLOTS - real_duration, current_slot + 1)
+            new_slot = min(NUM_SLOTS - real_duration, next_open_start_slot(operator_id, new_slot, direction=1))
             if new_slot != current_slot:
+                span_at_new_slot = compute_span_slots(new_slot, real_duration, operator_id)
                 # Vérifier s'il y a collision avant de déplacer
-                collision = check_collision(operator_id, new_slot, duration, task_id)
+                collision = check_collision(operator_id, new_slot, span_at_new_slot, task_id)
+                print(f"[DEBUG] handle_keyboard_push(right): task={task_id} current_slot={current_slot} new_slot={new_slot} span={span_at_new_slot} collision={collision['id'] if collision else None}", flush=True)
                 if collision:
                     # Essayer de pousser la tâche en collision vers la droite
-                    push_success = push_task_cascade(collision, "right", new_slot + duration)
+                    push_success = push_task_cascade(collision, "right", new_slot + span_at_new_slot)
+                    print(f"[DEBUG] handle_keyboard_push(right): push_task_cascade success={push_success} collision_new_slot={get_task_start_slot(collision)}", flush=True)
                     if not push_success:
                         # Si impossible de pousser, la tâche reste à sa position actuelle
                         return {"success": True, "new_slot": current_slot, "blocked": True}
-                
-                # Déplacer la tâche principale
-                update_task_from_slots(task, new_slot, duration)
+
+                # Déplacer la tâche principale (durée réelle conservée)
+                update_task_from_slots(task, new_slot, real_duration)
         
         final_slot = get_task_start_slot(task)
         return {"success": True, "new_slot": final_slot}
@@ -1090,44 +1160,49 @@ def push_task_cascade(task, direction, boundary_position):
     
     while current_task and iteration < max_iterations:
         iteration += 1
-        duration = get_task_duration_slots(current_task)
-        
+        real_duration = get_task_duration_slots(current_task)
+
         if direction == "left":
-            # Calculer la nouvelle position
-            new_start_slot = current_boundary - duration
+            # Calculer la nouvelle position pour que la tâche se termine exactement à
+            # current_boundary, en tenant compte des fermetures éventuelles à l'intérieur
+            new_start_slot = compute_start_for_end(current_boundary, real_duration, operator_id)
+            span_duration = current_boundary - new_start_slot
             # Vérifier si on dépasse le bord gauche
             if new_start_slot < 0:
                 return False
         else:  # direction == "right"
-            # Calculer la nouvelle position
-            new_start_slot = current_boundary
+            # Calculer la nouvelle position, jamais sur un slot fermé
+            new_start_slot = next_open_start_slot(operator_id, current_boundary, direction=1)
+            span_duration = compute_span_slots(new_start_slot, real_duration, operator_id)
             # Vérifier si on dépasse le bord droit
-            if new_start_slot + duration > NUM_SLOTS:
+            if new_start_slot + span_duration > NUM_SLOTS:
                 return False
-        
+
         # Ajouter la tâche à la liste des tâches à déplacer
         tasks_to_move.append({
             "task": current_task,
             "new_position": new_start_slot
         })
-        
+
         # Chercher la prochaine collision
-        next_collision = check_collision(operator_id, new_start_slot, duration, current_task["id"])
-        
+        next_collision = check_collision(operator_id, new_start_slot, span_duration, current_task["id"])
+        print(f"[DEBUG] push_task_cascade: dir={direction} boundary_in={boundary_position} iter={iteration} current_task={current_task['id']} real_duration={real_duration} new_start_slot={new_start_slot} span={span_duration} next_collision={next_collision['id'] if next_collision else None}", flush=True)
+
         if next_collision:
             current_task = next_collision
             if direction == "left":
                 current_boundary = new_start_slot
             else:  # right
-                current_boundary = new_start_slot + duration
+                current_boundary = new_start_slot + span_duration
         else:
             break
-    
+
     # Si on arrive ici, tous les déplacements sont possibles
-    # Déplacer toutes les tâches collectées
+    print(f"[DEBUG] push_task_cascade: applying tasks_to_move={[(m['task']['id'], m['new_position']) for m in tasks_to_move]}", flush=True)
+    # Déplacer toutes les tâches collectées (durée réelle conservée)
     for move_info in tasks_to_move:
-        task_duration = get_task_duration_slots(move_info["task"])
-        update_task_from_slots(move_info["task"], move_info["new_position"], task_duration)
+        task_real_duration = get_task_duration_slots(move_info["task"])
+        update_task_from_slots(move_info["task"], move_info["new_position"], task_real_duration)
     
     if iteration >= max_iterations:
         return False
@@ -1158,31 +1233,34 @@ def resolve_all_collisions_on_operator(operator_id):
             task2 = tasks[i + 1]
             
             task1_start_slot = get_task_start_slot(task1)
-            task1_duration_slots = get_task_duration_slots(task1)
+            task1_real_duration = get_task_duration_slots(task1)
+            task1_span_slots = get_task_span_slots(task1, task1_start_slot)
             task2_start_slot = get_task_start_slot(task2)
-            task2_duration_slots = get_task_duration_slots(task2)
-            
-            task1_end = task1_start_slot + task1_duration_slots
-            
+            task2_real_duration = get_task_duration_slots(task2)
+
+            task1_end = task1_start_slot + task1_span_slots
+
             # Si les tâches se chevauchent (collision réelle)
             if task1_end > task2_start_slot:
                 collision_found = True
-                
-                # Calculer l'espace nécessaire pour déplacer task2
-                needed_slot = task1_end
-                max_possible_slot = NUM_SLOTS - task2_duration_slots
-                
-                # Déplacer task2 vers la droite
+
+                # Calculer l'espace nécessaire pour déplacer task2 (jamais sur un slot fermé)
+                needed_slot = next_open_start_slot(task2["operator_id"], task1_end, direction=1)
+                task2_span_at_needed = compute_span_slots(needed_slot, task2_real_duration, task2["operator_id"])
+                max_possible_slot = NUM_SLOTS - task2_span_at_needed
+
+                # Déplacer task2 vers la droite (durée réelle conservée)
                 if needed_slot <= max_possible_slot:
-                    update_task_from_slots(task2, needed_slot, task2_duration_slots)
+                    update_task_from_slots(task2, needed_slot, task2_real_duration)
                 else:
-                    # Si pas assez de place à droite, déplacer task1 vers la gauche
-                    needed_slot_left = task2_start_slot - task1_duration_slots
+                    # Si pas assez de place à droite, déplacer task1 vers la gauche pour qu'il se
+                    # termine exactement au début de task2 (fermetures internes prises en compte)
+                    needed_slot_left = compute_start_for_end(task2_start_slot, task1_real_duration, task1["operator_id"])
                     if needed_slot_left >= 0:
-                        update_task_from_slots(task1, needed_slot_left, task1_duration_slots)
+                        update_task_from_slots(task1, needed_slot_left, task1_real_duration)
                     else:
                         # Cas extrême : déplacer task2 le plus loin possible à droite
-                        update_task_from_slots(task2, max_possible_slot, task2_duration_slots)
+                        update_task_from_slots(task2, max_possible_slot, task2_real_duration)
                 
                 break  # Recommencer la vérification depuis le début
         
@@ -1420,9 +1498,9 @@ def planning():
         
         display_task = task.copy()
         display_task["start_slot"] = get_task_start_slot(task)
-        display_task["duration"] = get_task_duration_slots(task)
+        display_task["duration"] = get_task_span_slots(task)
         display_tasks.append(display_task)
-    
+
     # Utiliser tous les opérateurs au lieu de filtrer par ceux qui ont des tâches
     # filtered_operators = [op for op in OPERATORS if op['id'] in operators_with_tasks]
     
@@ -1501,22 +1579,28 @@ def move_task():
         # Recaler automatiquement sur le premier slot ouvert si la nouvelle position tombe
         # sur un jour fermé (week-end/fermeture) ou une absence de l'opérateur cible
         new_start_slot = next_open_start_slot(new_operator_id, new_start_slot, direction=1)
+        span_slots = compute_span_slots(new_start_slot, duration_slots, new_operator_id)
+        print(
+            f"[DEBUG] move_task: task_id={task_id} old_operator={old_operator_id} old_start_slot={old_start_slot} -> "
+            f"new_operator={new_operator_id} new_start_slot(requested)={new_start_slot_raw} new_start_slot(recalé)={new_start_slot} span={span_slots}",
+            flush=True
+        )
 
         # Utiliser la nouvelle fonction qui pousse toutes les tâches en collision vers la droite
-        push_success = push_all_colliding_tasks_right(new_operator_id, new_start_slot, duration_slots, task_id)
-        
+        push_success = push_all_colliding_tasks_right(new_operator_id, new_start_slot, span_slots, task_id)
+
         if not push_success:
             # Si impossible de pousser toutes les tâches vers la droite, ne pas déplacer la tâche
             return jsonify({"success": False, "error": "Impossible de placer la tâche : pas assez d'espace"})
-        
-        # Mettre à jour la tâche uniquement si le déplacement des collisions a réussi
+
+        # Mettre à jour la tâche uniquement si le déplacement des collisions a réussi (durée réelle conservée)
         task["operator_id"] = new_operator_id
         update_task_from_slots(task, new_start_slot, duration_slots)
-        
+
         # Résoudre les éventuelles collisions résiduelles sur le nouvel opérateur seulement si nécessaire
         if old_operator_id != new_operator_id:
             # Vérifier s'il y a réellement des collisions avant de résoudre
-            collision = check_collision(new_operator_id, new_start_slot, duration_slots, task_id)
+            collision = check_collision(new_operator_id, new_start_slot, span_slots, task_id)
             if collision:
                 resolve_all_collisions_on_operator(new_operator_id)
         
@@ -1609,9 +1693,10 @@ def keyboard_move_task():
 
                 # Recaler sur le premier slot ouvert du nouvel opérateur (fermeture/absence)
                 start_slot = next_open_start_slot(new_operator_id, start_slot, direction=1)
+                span_slots = compute_span_slots(start_slot, duration_slots, new_operator_id)
 
                 # Vérifier d'abord si le déplacement est possible en utilisant la même logique robuste que pour les autres déplacements
-                push_success = push_all_colliding_tasks_right(new_operator_id, start_slot, duration_slots, task_id)
+                push_success = push_all_colliding_tasks_right(new_operator_id, start_slot, span_slots, task_id)
                 
                 if push_success:
                     # Le déplacement est possible, effectuer le changement d'opérateur
@@ -1661,27 +1746,32 @@ def resize_task():
             return jsonify({"success": False, "error": "Durée manquante"})
         
         try:
-            new_duration_slots = int(new_duration_raw)
+            dragged_span_slots = int(new_duration_raw)
         except (ValueError, TypeError):
             return jsonify({"success": False, "error": "Durée invalide"})
-        
-        if new_duration_slots <= 0:
+
+        if dragged_span_slots <= 0:
             return jsonify({"success": False, "error": "La durée doit être positive"})
-        
+
         # Trouver la tâche
         task = next((t for t in TASKS if t["id"] == task_id), None)
         if not task:
             return jsonify({"success": False, "error": "Tâche non trouvée"})
-        
+
         # Sauvegarder l'ancienne durée pour comparaison
         old_duration_slots = get_task_duration_slots(task)
-        
-        # Mettre à jour la durée
+
+        # `dragged_span_slots` est le span visuel demandé (fermetures potentiellement incluses) ;
+        # la durée réelle (travaillée) ne compte que les slots ouverts dans cette plage
         start_slot = get_task_start_slot(task)
+        new_duration_slots = count_open_slots(start_slot, dragged_span_slots, task["operator_id"])
+        if new_duration_slots <= 0:
+            new_duration_slots = 1
         update_task_from_slots(task, start_slot, new_duration_slots)
-        
+
         # Résoudre toutes les collisions créées par le redimensionnement seulement si nécessaire
-        collision = check_collision(task["operator_id"], start_slot, new_duration_slots, task_id)
+        span_slots = get_task_span_slots(task, start_slot)
+        collision = check_collision(task["operator_id"], start_slot, span_slots, task_id)
         if collision:
             resolve_all_collisions_on_operator(task["operator_id"])
         
@@ -1735,22 +1825,22 @@ def resize_and_move_task():
         
         try:
             new_start_slot = int(new_start_slot)
-            new_duration_slots = int(new_duration_raw)
+            dragged_span_slots = int(new_duration_raw)
             operator_id = int(operator_id)
         except (ValueError, TypeError):
             return jsonify({"success": False, "error": "Paramètres numériques invalides"})
-        
+
         if new_start_slot < 0:
             return jsonify({"success": False, "error": "Le slot de départ doit être positif"})
-        
-        if new_duration_slots <= 0:
+
+        if dragged_span_slots <= 0:
             return jsonify({"success": False, "error": "La durée doit être positive"})
-        
+
         # Trouver la tâche
         task = next((t for t in TASKS if t["id"] == task_id), None)
         if not task:
             return jsonify({"success": False, "error": "Tâche non trouvée"})
-        
+
         # Sauvegarder les anciennes valeurs pour comparaison
         old_start_slot = get_task_start_slot(task)
         old_duration_slots = get_task_duration_slots(task)
@@ -1760,12 +1850,19 @@ def resize_and_move_task():
         # sur un jour fermé (week-end/fermeture) ou une absence de l'opérateur cible
         new_start_slot = next_open_start_slot(operator_id, new_start_slot, direction=1)
 
+        # `dragged_span_slots` est le span visuel demandé (fermetures potentiellement incluses) ;
+        # la durée réelle (travaillée) ne compte que les slots ouverts dans cette plage
+        new_duration_slots = count_open_slots(new_start_slot, dragged_span_slots, operator_id)
+        if new_duration_slots <= 0:
+            new_duration_slots = 1
+
         # Mettre à jour la tâche avec les nouvelles position et durée
         task["operator_id"] = operator_id
         update_task_from_slots(task, new_start_slot, new_duration_slots)
-        
+
         # Résoudre toutes les collisions créées par le déplacement/redimensionnement
-        collision = check_collision(operator_id, new_start_slot, new_duration_slots, task_id)
+        span_slots = get_task_span_slots(task, new_start_slot)
+        collision = check_collision(operator_id, new_start_slot, span_slots, task_id)
         if collision:
             resolve_all_collisions_on_operator(operator_id)
         
@@ -1802,7 +1899,7 @@ def get_planning_data():
     for task in TASKS:
         display_task = task.copy()
         start_slot = get_task_start_slot(task)
-        duration_slots = get_task_duration_slots(task)
+        duration_slots = get_task_span_slots(task, start_slot)
         display_task["start_slot"] = start_slot
         display_task["duration"] = duration_slots
         display_tasks.append(display_task)
@@ -1845,7 +1942,7 @@ def debug_html():
     for task in TASKS:
         display_task = task.copy()
         display_task["start_slot"] = get_task_start_slot(task)
-        display_task["duration"] = get_task_duration_slots(task)
+        display_task["duration"] = get_task_span_slots(task)
         # Ajouter des informations de debug
         display_task["start_date_str"] = str(task["start_date"])
         display_task["start_date_iso"] = task["start_date"].isoformat()
