@@ -860,6 +860,11 @@ def get_affair_by_id(affaire_id):
 def get_operator_by_id(operator_id):
     return next((operator for operator in OPERATORS if operator["id"] == operator_id), None)
 
+def is_weekend_slot(slot):
+    """Vérifie si un slot tombe un samedi ou un dimanche"""
+    slot_datetime = slot_to_date(slot)
+    return slot_datetime.weekday() in (5, 6)
+
 def is_vacation_slot(slot):
     """Vérifie si un slot correspond à une date de congé"""
     slot_datetime = slot_to_date(slot)
@@ -881,6 +886,16 @@ def is_absence_slot(operator_id, slot):
             slot_datetime.hour == absence_date.hour):
             return True
     return False
+
+def next_open_start_slot(operator_id, slot, direction=1):
+    """Avance (direction=1) ou recule (direction=-1) depuis `slot` jusqu'au premier slot
+    qui n'est ni un jour/demi-journée de fermeture globale, ni une absence de l'opérateur.
+    Utilisé pour recaler automatiquement une tâche déplacée/redimensionnée sur une période fermée."""
+    safety = 0
+    while 0 <= slot < NUM_SLOTS and (is_weekend_slot(slot) or is_vacation_slot(slot) or is_absence_slot(operator_id, slot)) and safety < NUM_SLOTS:
+        slot += direction
+        safety += 1
+    return slot
 
 def get_tasks_for_operator(operator_id):
     return [task for task in TASKS if task["operator_id"] == operator_id]
@@ -1013,6 +1028,10 @@ def handle_keyboard_push(task_id, direction):
         
         if direction == "left":
             new_slot = max(0, current_slot - 1)
+            new_slot = next_open_start_slot(operator_id, new_slot, direction=-1)
+            if new_slot < 0:
+                # Plus aucun slot ouvert avant : rester sur place
+                return {"success": True, "new_slot": current_slot, "blocked": True}
             if new_slot != current_slot:
                 # Vérifier s'il y a collision avant de déplacer
                 collision = check_collision(operator_id, new_slot, duration, task_id)
@@ -1028,6 +1047,7 @@ def handle_keyboard_push(task_id, direction):
                 
         elif direction == "right":
             new_slot = min(NUM_SLOTS - duration, current_slot + 1)
+            new_slot = min(NUM_SLOTS - duration, next_open_start_slot(operator_id, new_slot, direction=1))
             if new_slot != current_slot:
                 # Vérifier s'il y a collision avant de déplacer
                 collision = check_collision(operator_id, new_slot, duration, task_id)
@@ -1477,7 +1497,11 @@ def move_task():
         old_operator_id = task["operator_id"]
         old_start_slot = get_task_start_slot(task)
         duration_slots = get_task_duration_slots(task)
-        
+
+        # Recaler automatiquement sur le premier slot ouvert si la nouvelle position tombe
+        # sur un jour fermé (week-end/fermeture) ou une absence de l'opérateur cible
+        new_start_slot = next_open_start_slot(new_operator_id, new_start_slot, direction=1)
+
         # Utiliser la nouvelle fonction qui pousse toutes les tâches en collision vers la droite
         push_success = push_all_colliding_tasks_right(new_operator_id, new_start_slot, duration_slots, task_id)
         
@@ -1582,13 +1606,17 @@ def keyboard_move_task():
                 old_operator_id = task["operator_id"]
                 start_slot = get_task_start_slot(task)
                 duration_slots = get_task_duration_slots(task)
-                
+
+                # Recaler sur le premier slot ouvert du nouvel opérateur (fermeture/absence)
+                start_slot = next_open_start_slot(new_operator_id, start_slot, direction=1)
+
                 # Vérifier d'abord si le déplacement est possible en utilisant la même logique robuste que pour les autres déplacements
                 push_success = push_all_colliding_tasks_right(new_operator_id, start_slot, duration_slots, task_id)
                 
                 if push_success:
                     # Le déplacement est possible, effectuer le changement d'opérateur
                     task["operator_id"] = new_operator_id
+                    update_task_from_slots(task, start_slot, duration_slots)
 
                     # Persistons toutes les tâches du NOUVEL opérateur (poussées comprises)
                     tasks_to_update = [
@@ -1727,7 +1755,11 @@ def resize_and_move_task():
         old_start_slot = get_task_start_slot(task)
         old_duration_slots = get_task_duration_slots(task)
         old_operator_id = task["operator_id"]
-        
+
+        # Recaler automatiquement sur le premier slot ouvert si la nouvelle position tombe
+        # sur un jour fermé (week-end/fermeture) ou une absence de l'opérateur cible
+        new_start_slot = next_open_start_slot(operator_id, new_start_slot, direction=1)
+
         # Mettre à jour la tâche avec les nouvelles position et durée
         task["operator_id"] = operator_id
         update_task_from_slots(task, new_start_slot, new_duration_slots)
