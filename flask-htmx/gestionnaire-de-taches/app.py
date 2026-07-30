@@ -1013,13 +1013,6 @@ def push_all_colliding_tasks_right(operator_id, start_slot, duration, exclude_ta
         if not (new_task_end <= task_start or start_slot >= task_end):
             tasks_to_push.append(task)
 
-    print(
-        f"[DEBUG] push_all_colliding_tasks_right: operator={operator_id} start_slot={start_slot} duration={duration} "
-        f"new_task_end={new_task_end} exclude={exclude_task_id} -> tasks_to_push="
-        f"{[(t['id'], get_task_start_slot(t), get_task_span_slots(t)) for t in tasks_to_push]}",
-        flush=True
-    )
-
     if not tasks_to_push:
         return True  # Aucune tâche à pousser
 
@@ -1044,7 +1037,6 @@ def push_all_colliding_tasks_right(operator_id, start_slot, duration, exclude_ta
             cascade_tasks.append(potential_collision)
 
         # Mettre à jour la position de cette tâche (durée réelle conservée)
-        print(f"[DEBUG] push_all_colliding_tasks_right: phase1 move task={task['id']} -> new_position={new_position} span={span_duration}", flush=True)
         update_task_from_slots(task, new_position, real_duration)
         current_position = new_position + span_duration
 
@@ -1088,7 +1080,6 @@ def handle_keyboard_push(task_id, direction):
         operator_id = task["operator_id"]
         current_slot = get_task_start_slot(task)
         real_duration = get_task_duration_slots(task)
-        print(f"[DEBUG] handle_keyboard_push: task={task_id} direction={direction} operator={operator_id} current_slot={current_slot} real_duration={real_duration}", flush=True)
 
         if direction == "left":
             new_slot = max(0, current_slot - 1)
@@ -1100,11 +1091,9 @@ def handle_keyboard_push(task_id, direction):
                 span_at_new_slot = compute_span_slots(new_slot, real_duration, operator_id)
                 # Vérifier s'il y a collision avant de déplacer
                 collision = check_collision(operator_id, new_slot, span_at_new_slot, task_id)
-                print(f"[DEBUG] handle_keyboard_push(left): task={task_id} current_slot={current_slot} new_slot={new_slot} span={span_at_new_slot} collision={collision['id'] if collision else None}", flush=True)
                 if collision:
                     # Essayer de pousser la tâche en collision vers la gauche
                     push_success = push_task_cascade(collision, "left", new_slot)
-                    print(f"[DEBUG] handle_keyboard_push(left): push_task_cascade success={push_success} collision_new_slot={get_task_start_slot(collision)}", flush=True)
                     if not push_success:
                         # Si impossible de pousser, la tâche reste à sa position actuelle
                         return {"success": True, "new_slot": current_slot, "blocked": True}
@@ -1119,11 +1108,9 @@ def handle_keyboard_push(task_id, direction):
                 span_at_new_slot = compute_span_slots(new_slot, real_duration, operator_id)
                 # Vérifier s'il y a collision avant de déplacer
                 collision = check_collision(operator_id, new_slot, span_at_new_slot, task_id)
-                print(f"[DEBUG] handle_keyboard_push(right): task={task_id} current_slot={current_slot} new_slot={new_slot} span={span_at_new_slot} collision={collision['id'] if collision else None}", flush=True)
                 if collision:
                     # Essayer de pousser la tâche en collision vers la droite
                     push_success = push_task_cascade(collision, "right", new_slot + span_at_new_slot)
-                    print(f"[DEBUG] handle_keyboard_push(right): push_task_cascade success={push_success} collision_new_slot={get_task_start_slot(collision)}", flush=True)
                     if not push_success:
                         # Si impossible de pousser, la tâche reste à sa position actuelle
                         return {"success": True, "new_slot": current_slot, "blocked": True}
@@ -1186,7 +1173,6 @@ def push_task_cascade(task, direction, boundary_position):
 
         # Chercher la prochaine collision
         next_collision = check_collision(operator_id, new_start_slot, span_duration, current_task["id"])
-        print(f"[DEBUG] push_task_cascade: dir={direction} boundary_in={boundary_position} iter={iteration} current_task={current_task['id']} real_duration={real_duration} new_start_slot={new_start_slot} span={span_duration} next_collision={next_collision['id'] if next_collision else None}", flush=True)
 
         if next_collision:
             current_task = next_collision
@@ -1198,7 +1184,6 @@ def push_task_cascade(task, direction, boundary_position):
             break
 
     # Si on arrive ici, tous les déplacements sont possibles
-    print(f"[DEBUG] push_task_cascade: applying tasks_to_move={[(m['task']['id'], m['new_position']) for m in tasks_to_move]}", flush=True)
     # Déplacer toutes les tâches collectées (durée réelle conservée)
     for move_info in tasks_to_move:
         task_real_duration = get_task_duration_slots(move_info["task"])
@@ -1329,39 +1314,45 @@ def planning_selection():
                              current_database_url_odoo=CURRENT_DATABASE_URL_ODOO,
                              error=str(e))
 
+def load_planning_end_date(planning_id):
+    """Récupère (et met à jour la variable globale) la date de fin du planning depuis la base"""
+    global CURRENT_PLANNING_END_DATE
+    CURRENT_PLANNING_END_DATE = None
+    try:
+        conn = get_db_connection()
+        if conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(
+                    """
+                    SELECT date_fin_planning
+                    FROM is_gestion_tache_planning
+                    WHERE id = %s
+                    """,
+                    (planning_id,)
+                )
+                row = cursor.fetchone()
+                if row and row.get('date_fin_planning'):
+                    # S'assurer d'avoir un objet date
+                    dfp = row['date_fin_planning']
+                    if isinstance(dfp, datetime):
+                        dfp = dfp.date()
+                    CURRENT_PLANNING_END_DATE = dfp
+            conn.close()
+    except Exception:
+        CURRENT_PLANNING_END_DATE = None
+    return CURRENT_PLANNING_END_DATE
+
 @app.route('/select_planning/<int:planning_id>')
 def select_planning(planning_id):
     """Sélectionne un planning et redirige vers 'Gestion de tâches'"""
     global CURRENT_PLANNING_ID, OPERATORS, AFFAIRES, TASKS, CURRENT_PLANNING_END_DATE, NUM_SLOTS, START_DATE
-    
+
     try:
         # Sauvegarder l'ID du planning
         CURRENT_PLANNING_ID = planning_id
 
         # Récupérer la date de fin du planning
-        CURRENT_PLANNING_END_DATE = None
-        try:
-            conn = get_db_connection()
-            if conn:
-                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                    cursor.execute(
-                        """
-                        SELECT date_fin_planning
-                        FROM is_gestion_tache_planning
-                        WHERE id = %s
-                        """,
-                        (planning_id,)
-                    )
-                    row = cursor.fetchone()
-                    if row and row.get('date_fin_planning'):
-                        # S'assurer d'avoir un objet date
-                        dfp = row['date_fin_planning']
-                        if isinstance(dfp, datetime):
-                            dfp = dfp.date()
-                        CURRENT_PLANNING_END_DATE = dfp
-                conn.close()
-        except Exception:
-            CURRENT_PLANNING_END_DATE = None
+        load_planning_end_date(planning_id)
 
         # Calculer NUM_SLOTS en fonction de la date du jour et de la date fin planning (2 slots/jour), min 60
         today = date.today()
@@ -1580,11 +1571,6 @@ def move_task():
         # sur un jour fermé (week-end/fermeture) ou une absence de l'opérateur cible
         new_start_slot = next_open_start_slot(new_operator_id, new_start_slot, direction=1)
         span_slots = compute_span_slots(new_start_slot, duration_slots, new_operator_id)
-        print(
-            f"[DEBUG] move_task: task_id={task_id} old_operator={old_operator_id} old_start_slot={old_start_slot} -> "
-            f"new_operator={new_operator_id} new_start_slot(requested)={new_start_slot_raw} new_start_slot(recalé)={new_start_slot} span={span_slots}",
-            flush=True
-        )
 
         # Utiliser la nouvelle fonction qui pousse toutes les tâches en collision vers la droite
         push_success = push_all_colliding_tasks_right(new_operator_id, new_start_slot, span_slots, task_id)
@@ -1955,6 +1941,10 @@ def reload_data():
     """Recharge à la fois les opérateurs, les affaires et les tâches depuis la base de données"""
     global OPERATORS, AFFAIRES, TASKS, START_DATE, NUM_SLOTS
     try:
+        # Recharger la date de fin du planning (peut avoir été modifiée dans Odoo)
+        if CURRENT_PLANNING_ID:
+            load_planning_end_date(CURRENT_PLANNING_ID)
+
         # ÉTAPE 1 : Si maj_of_auto est coché, appeler action_maj_date_of puis action_chargement_taches via XML-RPC
         maj_of_msg = ""
         if CURRENT_PLANNING_ID:
@@ -2072,6 +2062,10 @@ def reload_tasks():
     """Recharge les tâches depuis la base de données"""
     global TASKS, START_DATE, NUM_SLOTS
     try:
+        # Recharger la date de fin du planning (peut avoir été modifiée dans Odoo)
+        if CURRENT_PLANNING_ID:
+            load_planning_end_date(CURRENT_PLANNING_ID)
+
         TASKS = load_tasks_from_db(CURRENT_PLANNING_ID)
         
         # Recalculer la date de début du planning basée sur les nouvelles tâches

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from odoo import models,fields,api
 from odoo.exceptions import Warning
-from datetime import timedelta, time as dtime
+from datetime import timedelta, time as dtime, datetime as dt_datetime
 import random
 import logging
 import pytz
@@ -246,6 +246,16 @@ class is_gestion_tache_planning(models.Model):
 
         # Paramètres de base (poste de charge)
         params = [self.workcenter_id.id]
+
+        # Ajout éventuel de la limite supérieure de date (date_fin_planning)
+        if self.date_fin_planning:
+            cutoff_local = PARIS_TZ.localize(dt_datetime.combine(self.date_fin_planning, dtime(23, 59, 59)))
+            cutoff_utc = cutoff_local.astimezone(pytz.utc).replace(tzinfo=None)
+            if self.type_donnees == 'operation' and self.workcenter_id:
+                SQL += " and line.heure_debut <= %s \n"
+            else:
+                SQL += " and mp.date_planned_start <= %s \n"
+            params.append(cutoff_utc)
 
         # Ajout éventuel du filtre sur les affaires (sur le nom d'affaire)
         if self.affaire:
